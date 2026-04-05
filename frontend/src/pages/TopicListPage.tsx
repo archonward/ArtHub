@@ -1,179 +1,104 @@
-import React, { useState, useEffect } from 'react';
-import { Topic } from '../types';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import Notice from "../components/Notice";
+import PageLayout from "../components/PageLayout";
+import { CURRENT_USER_STORAGE_KEY } from "../constants/storage";
+import { forumApi } from "../services/api/forumApi";
+import type { Topic } from "../types";
 
 const TopicListPage: React.FC = () => {
   const navigate = useNavigate();
-
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogout = () => {
-	localStorage.removeItem('currentUser');	// clear user from localstorage
-	navigate('/login');
-  };
-
-
   useEffect(() => {
     const fetchTopics = async () => {
       try {
-        const response = await fetch('http://localhost:8080/topics');
-        if (!response.ok) {
-          throw new Error(`No response from backend server: ${response.status}`);
-        }
-        const data: Topic[] = await response.json();
-        setTopics(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load topics.');
+        setTopics(await forumApi.getTopics());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load topics.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTopics();
+    void fetchTopics();
   }, []);
 
+  const handleDelete = async (topicId: number) => {
+    if (!window.confirm("Delete this topic? This also removes its posts and comments.")) {
+      return;
+    }
+
+    try {
+      await forumApi.deleteTopic(topicId);
+      setTopics((current) => current.filter((topic) => topic.id !== topicId));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete topic.");
+    }
+  };
+
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'flex-start',
-      minHeight: '100vh',
-      backgroundColor: '#f5f7fa',
-      margin: 0,
-      fontFamily: 'Arial, sans-serif',
-      padding: '2rem 1rem'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '2rem',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        width: '100%',
-        maxWidth: '600px',
-	position: 'relative'
-      }}>
+    <PageLayout
+      title="Topics"
+      subtitle="Browse the forum structure or start a new discussion area."
+      actions={
+        <div className="action-row">
+          <button className="button button--secondary" onClick={() => navigate("/topics/new")}>
+            New Topic
+          </button>
+          <button
+            className="button button--ghost"
+            onClick={() => {
+              localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+              navigate("/login");
+            }}
+          >
+            Log Out
+          </button>
+        </div>
+      }
+    >
+      {error ? <Notice tone="error">{error}</Notice> : null}
+      {loading ? <p className="empty-state">Loading topics...</p> : null}
 
-	<button
-          onClick={handleLogout}
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            right: '1rem',
-            background: 'none',
-            border: 'none',
-            color: '#666',
-            fontSize: '0.85rem',
-            cursor: 'pointer',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '4px'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.color = '#d32f2f'}
-          onMouseLeave={(e) => e.currentTarget.style.color = '#666'}
-        >
-          Logout
-        </button>
-        <h2 style={{ textAlign: 'center', margin: '0 0 1.5rem 0', color: '#333' }}>
-          Topics
-        </h2>
+      {!loading && topics.length === 0 ? (
+        <p className="empty-state">No topics yet. Create the first one to get started.</p>
+      ) : null}
 
-        {error && (
-          <div style={{
-            backgroundColor: '#ffebee',
-            color: '#c62828',
-            padding: '0.75rem',
-            borderRadius: '4px',
-            marginBottom: '1.5rem',
-            textAlign: 'center'
-          }}>
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <p style={{ textAlign: 'center', color: '#666' }}>Loading topics...</p>
-        ) : (
-          <div>
-            <button
-              onClick={() => navigate('/topics/new')}
-              style={{
-                backgroundColor: '#388e3c',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '0.6rem 1rem',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                marginBottom: '1.5rem',
-                width: '100%'
-              }}
+      {!loading && topics.length > 0 ? (
+        <ul className="list">
+          {topics.map((topic) => (
+            <li
+              key={topic.id}
+              className="list-item list-item--interactive"
+              onClick={() => navigate(`/topics/${topic.id}`)}
             >
-              Create New Topic
-            </button>
-
-            {topics.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#666', fontStyle: 'italic' }}>
-                No topics yet. You can create the first topic using the button above.
-              </p>
-            ) : (
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {topics.map((topic) => (
-                  <li
-                    key={topic.id}
-                    style={{
-                      padding: '1rem',
-                      borderBottom: '1px solid #eee',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.2s'
-                    }}
-                    onClick={() => navigate(`/topics/${topic.id}`)}
-                  >
-                    <h3 style={{ margin: '0 0 0.25rem 0', color: '#1976d2' }}>
-                      {topic.title}
-                    </h3>
-                    <p style={{ margin: '0 0 0.5rem 0', color: '#555', fontSize: '0.95rem' }}>
-                      {topic.description}
-                    </p>
-                    <small style={{ color: '#888', fontSize: '0.85rem' }}>
-                      Created by user {topic.created_by} • {new Date(topic.created_at).toLocaleString()}
-                    </small>
-		     <button
-     			 onClick={(e) => {
-       				 e.stopPropagation(); // prevent triggering navigate
-       				 if (window.confirm('delete this topic? This will also delete all posts and comments.')) {
-         				 fetch(`http://localhost:8080/topics/${topic.id}`, { method: 'DELETE' })
-           					 .then(res => {
-             						 if (res.ok) {
-               						    setTopics(topics.filter(t => t.id !== topic.id));
-             						 } else {
-               						    alert('Failed to delete topic');
-             						 }
-           		    });
-       			   }
-     		        }}
-     			 style={{
-       				 marginLeft: '0.5rem',
-       				 background: 'none',
-       				 border: '1px solid #d32f2f',
-       				 color: '#d32f2f',
-       				 borderRadius: '3px',
-       				 padding: '0.1rem 0.4rem',
-       				 fontSize: '0.8rem',
-       				 cursor: 'pointer'
-     			 }}
-   		       >
-     			 Delete
-   		      </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+              <div className="action-row" style={{ justifyContent: "space-between" }}>
+                <div>
+                  <h2 className="content-title">{topic.title}</h2>
+                  <p className="content-body">{topic.description || "No description provided."}</p>
+                  <p className="meta">
+                    Created by user {topic.createdBy} on{" "}
+                    {new Date(topic.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  className="button button--danger"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDelete(topic.id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </PageLayout>
   );
 };
 

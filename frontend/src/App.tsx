@@ -1,6 +1,3 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import TopicListPage from './pages/TopicListPage';
@@ -17,13 +14,13 @@ function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
-	<Route path="/topics" element={<TopicListPage />} />
-	<Route path="/topics/new" element={<NewTopicPage />} /> 
-	<Route path="/topics/:id" element={<TopicDetailPage />} />
-	<Route path="/topics/:id/posts/new" element={<NewPostPage />} />
-	<Route path="/posts/:postId" element={<PostDetailPage />} />
-	<Route path="/topics/:id/edit" element={<EditTopicPage />} />
-	<Route path="/posts/:postId/edit" element={<EditPostPage />} />
+        <Route path="/topics" element={<TopicListPage />} />
+        <Route path="/topics/new" element={<NewTopicPage />} />
+        <Route path="/topics/:id" element={<TopicDetailPage />} />
+        <Route path="/topics/:id/posts/new" element={<NewPostPage />} />
+        <Route path="/posts/:postId" element={<PostDetailPage />} />
+        <Route path="/topics/:id/edit" element={<EditTopicPage />} />
+        <Route path="/posts/:postId/edit" element={<EditPostPage />} />
       </Routes>
     </Router>
   );

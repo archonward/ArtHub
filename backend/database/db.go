@@ -10,13 +10,13 @@ import (
 
 var DB *sql.DB
 
-func InitDB() {
+func InitDB() error {
 	// Create data directory if it doesn't exist
 	const dataDir = "data"
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 		err := os.Mkdir(dataDir, 0755)
 		if err != nil {
-			log.Fatal("Failed to create data directory:", err)
+			return err
 		}
 	}
 
@@ -25,19 +25,32 @@ func InitDB() {
 	var err error
 	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatal("Failed to open database:", err)
+		return err
 	}
 
 	if err := DB.Ping(); err != nil {			// Test the connection
-		log.Fatal("Failed to ping database:", err)
+		return err
 	}
 
 	log.Println("Connected to SQLite database at", dbPath)
 
-	createTables()
+	if err := enableForeignKeys(DB); err != nil {
+		return err
+	}
+
+	if err := CreateSchema(DB); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func createTables() {
+func enableForeignKeys(db *sql.DB) error {
+	_, err := db.Exec(`PRAGMA foreign_keys = ON;`)
+	return err
+}
+
+func CreateSchema(db *sql.DB) error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,12 +87,17 @@ func createTables() {
 		FOREIGN KEY(post_id) REFERENCES posts(id),
 		FOREIGN KEY(created_by) REFERENCES users(id)
 	);
+
+	CREATE INDEX IF NOT EXISTS idx_topics_created_by ON topics(created_by);
+	CREATE INDEX IF NOT EXISTS idx_posts_topic_id ON posts(topic_id);
+	CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
 	`
 
-	_, err := DB.Exec(schema)
+	_, err := db.Exec(schema)
 	if err != nil {
-		log.Fatal("Failed to create tables:", err)
+		return err
 	}
 
 	log.Println("Tables created, if they didn't exist")
+	return nil
 }

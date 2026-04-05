@@ -2,317 +2,296 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
-	"time"
-
-	"github.com/archonward/CampusCommons/backend/database"
 )
 
-type Post struct {
-	ID       int       `json:"id"`
-	TopicID  int       `json:"topic_id"`
-	Title    string    `json:"title"`
-	Body     string    `json:"body"`
-	CreatedBy int      `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
+func TopicPostsResource(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		GetPostsByTopic(w, r)
+	case http.MethodPost:
+		CreatePost(w, r)
+	default:
+		writeMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
 }
 
-// this func handles GET /topics/id/posts
-func GetPostsByTopic(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Content-Type", "application/json")
-
-	// extract topic ID from URL path
-	topicIDStr := request.PathValue("id")
-	if topicIDStr == "" {
-		http.Error(writer, "topic ID is required", http.StatusBadRequest)
-		return
+func PostResource(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		GetPostByID(w, r)
+	case http.MethodPut:
+		UpdatePost(w, r)
+	case http.MethodDelete:
+		DeletePost(w, r)
+	default:
+		writeMethodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
 	}
+}
 
-	topicID, err := strconv.Atoi(topicIDStr)	// convert to int
-	if err != nil || topicID <= 0 {
-		http.Error(writer, "Invalid topic ID", http.StatusBadRequest)
-		return
-	}
-
-	// Check if topic exists first
-	var exists bool
-	err = database.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID).Scan(&exists)
-	// standard SQL query to check for presence of topic
+func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
+	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		log.Printf("Error checking topic existence: %v", err)
-		http.Error(writer, "Database error", http.StatusInternalServerError)
+		writeError(w, http.StatusBadRequest, "invalid topic id")
+		return
+	}
+
+	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID)
+	if err != nil {
+		log.Printf("GetPostsByTopic topic lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to verify topic")
 		return
 	}
 	if !exists {
-		http.Error(writer, "Topic not found", http.StatusNotFound)	//send to react
+		writeError(w, http.StatusNotFound, "topic not found")
 		return
 	}
 
-	// Fetch all posts under the topic, starting from the oldest
-	rows, err := database.DB.Query(`SELECT id, topic_id, title, body, created_by, created_at
+	rows, err := db().Query(`
+		SELECT id, topic_id, title, body, created_by, created_at
 		FROM posts
 		WHERE topic_id = ?
-		ORDER BY created_at ASC`, topicID)
-
+		ORDER BY created_at ASC
+	`, topicID)
 	if err != nil {
-		log.Printf("fail to fetch posts: %v", err)
-		http.Error(writer, "failed to fetch posts", http.StatusInternalServerError)	//send to react
+		log.Printf("GetPostsByTopic query failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
 	}
-	// close rows when done to avoid leaking DB resources
 	defer rows.Close()
 
-	postList := []Post{}	
-	for rows.Next() {	// loop runs once per row, then moves onto next
-		var p Post
-		err := rows.Scan(&p.ID, &p.TopicID, &p.Title, &p.Body, &p.CreatedBy, &p.CreatedAt)
-		if err != nil {
-			// if scanning fails, return 500
-			log.Printf("row error: %v", err)
-			http.Error(writer, "parsing error", http.StatusInternalServerError)	// send the http error back to react
+	posts := make([]Post, 0)
+	for rows.Next() {
+		var post Post
+		if err := rows.Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt); err != nil {
+			log.Printf("GetPostsByTopic scan failed: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to parse posts")
 			return
 		}
-		postList = append(postList, p)	// add the Post to the list
+		posts = append(posts, post)
 	}
-	
-	err = rows.Err();
-	if err != nil {
-		log.Printf("rows iteration error: %v", err)
-		http.Error(writer, "retrieval error", http.StatusInternalServerError)
+
+	if err := rows.Err(); err != nil {
+		log.Printf("GetPostsByTopic rows failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to read posts")
 		return
 	}
 
-	json.NewEncoder(writer).Encode(postList)	// converts the list of Post into JSON, writes direct to ResponseWriter
+	writeJSON(w, http.StatusOK, posts)
 }
 
-func GetPostByID(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Content-Type", "application/json")	// tell client response will be JSON
-
-	postIDStr := request.PathValue("id")
-	postID, err := strconv.Atoi(postIDStr)
-	if err != nil || postID <= 0 {
-		http.Error(writer, "Invalid post ID", http.StatusBadRequest)
+func GetPostByID(w http.ResponseWriter, r *http.Request) {
+	postID, err := parsePathID(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid post id")
 		return
 	}
 
-	var p Post
-	//query for a single post by ID
-	err = database.DB.QueryRow(`
+	var post Post
+	err = db().QueryRow(`
 		SELECT id, topic_id, title, body, created_by, created_at
 		FROM posts
 		WHERE id = ?
-	`, postID).Scan(&p.ID, &p.TopicID, &p.Title, &p.Body, &p.CreatedBy, &p.CreatedAt)
-
+	`, postID).Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
 	if err == sql.ErrNoRows {
-		http.Error(writer, "Post not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "post not found")
 		return
-	} else if err != nil {
-		log.Printf("Failed to fetch post: %v", err)
-		http.Error(writer, "Database error", http.StatusInternalServerError)
+	}
+	if err != nil {
+		log.Printf("GetPostByID failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to load post")
 		return
 	}
 
-	json.NewEncoder(writer).Encode(p)
+	writeJSON(w, http.StatusOK, post)
 }
 
-// this func handles POST /topics/id/posts
-func CreatePost(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Content-Type", "application/json")
-
-	// Extract topic ID from URL
-	topicIDStr := request.PathValue("id")
-	if topicIDStr == "" {
-		http.Error(writer, "topic ID is required", http.StatusBadRequest)
-		return
-	}
-
-	topicID, err := strconv.Atoi(topicIDStr)
-	if err != nil || topicID <= 0 {
-		http.Error(writer, "invalid ID", http.StatusBadRequest)
-		return
-	}
-
-	var exists bool
-	err = database.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID).Scan(&exists)
+func CreatePost(w http.ResponseWriter, r *http.Request) {
+	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		log.Printf("error checking existence of topic: %v", err)
-		http.Error(writer, "database error", http.StatusInternalServerError)
+		writeError(w, http.StatusBadRequest, "invalid topic id")
+		return
+	}
+
+	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID)
+	if err != nil {
+		log.Printf("CreatePost topic lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to verify topic")
 		return
 	}
 	if !exists {
-		http.Error(writer, "topic not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "topic not found")
 		return
 	}
 
-	// expected JSON body for creeating post
 	var input struct {
 		Title     string `json:"title"`
 		Body      string `json:"body"`
 		CreatedBy int    `json:"created_by"`
 	}
-
-	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
-		log.Printf("invalid JSON: %v", err)
-		http.Error(writer, "invalid JSON payload", http.StatusBadRequest)
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload")
 		return
 	}
 
+	input.Title = trimRequired(input.Title)
+	input.Body = trimRequired(input.Body)
 	if input.Title == "" {
-		http.Error(writer, "title can't be empty", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
 	if input.Body == "" {
-		http.Error(writer, "body can't be empty", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "body is required")
 		return
 	}
 	if input.CreatedBy <= 0 {
-		http.Error(writer, "valid created_by user ID is required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "valid created_by user ID is required")
 		return
 	}
 
-	// insert post
-	result, err := database.DB.Exec(`INSERT INTO posts (topic_id, title, body, created_by)
-		VALUES (?, ?, ?, ?)`, topicID, input.Title, input.Body, input.CreatedBy) //SQL INSERT to create a new row
-
+	result, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by)
+		VALUES (?, ?, ?, ?)
+	`, topicID, input.Title, input.Body, input.CreatedBy)
 	if err != nil {
-		log.Printf("Failed to create post: %v", err)
-		http.Error(writer, "Failed to create post", http.StatusInternalServerError)
-		return
-	}
-	
-	// get the auto generated post ID from database
-	postID, err := result.LastInsertId()
-	if err != nil {
-		log.Printf("failed to get post ID: %v", err)
-		http.Error(writer, "failed to get post ID", http.StatusInternalServerError)
+		log.Printf("CreatePost insert failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to create post")
 		return
 	}
 
-	// Read the inserted post back from the database so we can return it as JSON.
+	id, err := result.LastInsertId()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to retrieve post")
+		return
+	}
+
 	var post Post
-	row := database.DB.QueryRow(`
+	err = db().QueryRow(`
 		SELECT id, topic_id, title, body, created_by, created_at
 		FROM posts
 		WHERE id = ?
-	`, postID)	// using WHERE id = ? so that we will take in the row with all the fields updated by the database
-	err = row.Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
-
+	`, id).Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
 	if err != nil {
-		log.Printf("failed to fetch created post: %v", err)
-		http.Error(writer, "failed to retrieve created post", http.StatusInternalServerError)
+		log.Printf("CreatePost reload failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to retrieve post")
 		return
 	}
 
-	writer.WriteHeader(http.StatusCreated)
-	json.NewEncoder(writer).Encode(post)
+	writeJSON(w, http.StatusCreated, post)
 }
 
-// this func handles DELETE /posts/{id}
-func DeletePost(writer http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodDelete {
-		http.Error(writer, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	postIDStr := request.PathValue("id")
-	postID, err := strconv.Atoi(postIDStr)
-	if err != nil || postID <= 0 {
-		http.Error(writer, "Invalid post ID", http.StatusBadRequest)
-		return
-	}
-
-	// start off, delete all comments under this post
-	_, err = database.DB.Exec(`DELETE FROM comments 
-		WHERE post_id = ?`, postID)
+func UpdatePost(w http.ResponseWriter, r *http.Request) {
+	postID, err := parsePathID(r, "id")
 	if err != nil {
-		log.Printf("failed to delete comments: %v", err)
-		http.Error(writer, "failed to delete comments", http.StatusInternalServerError)
+		writeError(w, http.StatusBadRequest, "invalid post id")
 		return
 	}
 
-	// Then, delete the post
-	result, err := database.DB.Exec(`DELETE FROM posts 
-		WHERE id = ?`, postID)
-	if err != nil {
-		log.Printf("failed to delete post: %v", err)
-		http.Error(writer, "failed to delete post", http.StatusInternalServerError)
-		return
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		http.Error(writer, "post does not exist", http.StatusNotFound)
-		return
-	}
-
-	writer.WriteHeader(http.StatusNoContent) // 204
-}
-
-// this func handles PUT /posts/{id}
-func UpdatePost(writer http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPut {
-		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-
-	postIDStr := request.PathValue("id")	
-	postID, err := strconv.Atoi(postIDStr)
-	if err != nil || postID <= 0 {
-		http.Error(writer, "invalid post ID", http.StatusBadRequest)
-		return
-	}
-
-	var existingTitle string
-	err = database.DB.QueryRow("SELECT title FROM posts WHERE id = ?", postID).Scan(&existingTitle)
+	var existing Post
+	err = db().QueryRow(`
+		SELECT id, topic_id, title, body, created_by, created_at
+		FROM posts
+		WHERE id = ?
+	`, postID).Scan(&existing.ID, &existing.TopicID, &existing.Title, &existing.Body, &existing.CreatedBy, &existing.CreatedAt)
 	if err == sql.ErrNoRows {
-		http.Error(writer, "post not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "post not found")
 		return
-	} else if err != nil {
-		log.Printf("DB error checking post: %v", err)
-		http.Error(writer, "Server error", http.StatusInternalServerError)
+	}
+	if err != nil {
+		log.Printf("UpdatePost lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to load post")
 		return
 	}
 
-	
+	if err := requireOwnership(r, existing.CreatedBy); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
 	var input struct {
 		Title string `json:"title"`
 		Body  string `json:"body"`
 	}
-	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {	// parsing
-		http.Error(writer, "Invalid JSON", http.StatusBadRequest)
+	if err := decodeJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload")
 		return
 	}
 
+	input.Title = trimRequired(input.Title)
+	input.Body = trimRequired(input.Body)
 	if input.Title == "" || input.Body == "" {
-		http.Error(writer, "title and body are required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "title and body are required")
 		return
 	}
 
-
-	_, err = database.DB.Exec(`UPDATE posts 
-		SET title = ?, body = ? 
-		WHERE id = ?`, input.Title, input.Body, postID)			// update row
-	if err != nil {
-		log.Printf("failed to update post: %v", err)
-		http.Error(writer, "failed to update post", http.StatusInternalServerError)
+	if _, err := db().Exec(`
+		UPDATE posts
+		SET title = ?, body = ?
+		WHERE id = ?
+	`, input.Title, input.Body, postID); err != nil {
+		log.Printf("UpdatePost update failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to update post")
 		return
 	}
 
-	var updatedPost Post
-	err = database.DB.QueryRow(`SELECT id, topic_id, title, body, created_by, created_at
-		FROM posts
-		WHERE id = ?`, postID).Scan(&updatedPost.ID, &updatedPost.TopicID, &updatedPost.Title, &updatedPost.Body, &updatedPost.CreatedBy, &updatedPost.CreatedAt)
-
-	if err != nil {
-		log.Printf("failed to fetch post: %v", err)
-		http.Error(writer, "failed to fetch post", http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(writer).Encode(updatedPost)
+	existing.Title = input.Title
+	existing.Body = input.Body
+	writeJSON(w, http.StatusOK, existing)
 }
 
+func DeletePost(w http.ResponseWriter, r *http.Request) {
+	postID, err := parsePathID(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid post id")
+		return
+	}
+
+	var ownerID int
+	if err := db().QueryRow(`SELECT created_by FROM posts WHERE id = ?`, postID).Scan(&ownerID); err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "post not found")
+		return
+	} else if err != nil {
+		log.Printf("DeletePost lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to load post")
+		return
+	}
+
+	if err := requireOwnership(r, ownerID); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+
+	tx, err := db().Begin()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete post")
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM comments WHERE post_id = ?`, postID); err != nil {
+		log.Printf("DeletePost comments failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete post comments")
+		return
+	}
+
+	result, err := tx.Exec(`DELETE FROM posts WHERE id = ?`, postID)
+	if err != nil {
+		log.Printf("DeletePost post failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to delete post")
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected == 0 {
+		writeError(w, http.StatusNotFound, "post not found")
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to finalize post deletion")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

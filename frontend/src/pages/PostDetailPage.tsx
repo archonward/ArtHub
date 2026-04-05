@@ -1,182 +1,169 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Post, Comment } from '../types';
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import Notice from "../components/Notice";
+import PageLayout from "../components/PageLayout";
+import { useCurrentUser } from "../hooks/useCurrentUser";
+import { forumApi } from "../services/api/forumApi";
+import type { Comment, Post } from "../types";
 
 const PostDetailPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
 
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
+  const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-
   useEffect(() => {
-    if (!postId) {
-      setError('Invalid post ID');
+    const parsedId = Number(postId);
+    if (!parsedId) {
+      setError("Invalid post ID.");
       setLoading(false);
       return;
     }
 
-  const fetchPostAndComments = async () => {
-    try {
-      // Fetch single post
-      const postRes = await fetch(`http://localhost:8080/posts/${postId}`);
-      if (!postRes.ok) throw new Error('Post not found');
-      const postData: Post = await postRes.json();
-
-      // Fetch comments
-      const commentsRes = await fetch(`http://localhost:8080/posts/${postId}/comments`);
-      if (!commentsRes.ok) throw new Error('Failed to fetch comments');
-      const commentsData: Comment[] = await commentsRes.json();
-
-      setPost(postData);
-      setComments(commentsData);
-    } catch (err: any) {
-        setError(err.message || 'Failed to load post and comments.');
-    } finally {
+    const fetchPost = async () => {
+      try {
+        const [postRecord, commentRecords] = await Promise.all([
+          forumApi.getPost(parsedId),
+          forumApi.getPostComments(parsedId),
+        ]);
+        setPost(postRecord);
+        setComments(commentRecords);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load post.");
+      } finally {
         setLoading(false);
-    }
+      }
     };
 
-    fetchPostAndComments();
+    void fetchPost();
   }, [postId]);
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!postId || !currentUser || !newComment.trim()) return;
+  const handleDelete = async () => {
+    if (!post || !window.confirm("Delete this post and all its comments?")) {
+      return;
+    }
+
+    try {
+      await forumApi.deletePost(post.id);
+      navigate(`/topics/${post.topicId}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete post.");
+    }
+  };
+
+  const handleAddComment = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!post || !currentUser || !newComment.trim()) {
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const response = await fetch(`http://localhost:8080/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          body: newComment.trim(),
-          created_by: currentUser.id,
-        }),
+      const comment = await forumApi.createComment(post.id, {
+        body: newComment.trim(),
+        createdBy: currentUser.id,
       });
-
-      if (!response.ok) throw new Error('Failed to add comment');
-
-      const comment: Comment = await response.json();
-      setComments([...comments, comment]);
-      setNewComment('');
-    } catch (err: any) {
-      alert(err.message || 'Failed to post comment.');
+      setComments((current) => [...current, comment]);
+      setNewComment("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to post comment.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) return <p style={{ textAlign: 'center', padding: '2rem' }}>Loading post...</p>;
-  if (error) return <p style={{ color: 'red', textAlign: 'center', padding: '2rem' }}>{error}</p>;
-  if (!post) return null;
+  if (loading) {
+    return (
+      <PageLayout title="Post" subtitle="Loading post details...">
+        <p className="empty-state">Loading post...</p>
+      </PageLayout>
+    );
+  }
+
+  if (error || !post) {
+    return (
+      <PageLayout title="Post" subtitle="Discussion unavailable.">
+        <Notice tone="error">{error || "Post not found."}</Notice>
+      </PageLayout>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: '700px', margin: '2rem auto', padding: '0 1rem' }}>
-      {/* Back + Delete row */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-        <button onClick={() => navigate(-1)}>
-          ← Back
-        </button>
+    <PageLayout
+      title={post.title}
+      subtitle={`Created by user ${post.createdBy} on ${new Date(post.createdAt).toLocaleString()}`}
+      actions={
+        <div className="action-row">
+          <button className="button button--secondary" onClick={() => navigate(-1)}>
+            Back
+          </button>
+          <button
+            className="button button--ghost"
+            onClick={() => navigate(`/posts/${post.id}/edit`)}
+          >
+            Edit
+          </button>
+          <button className="button button--danger" onClick={handleDelete}>
+            Delete
+          </button>
+        </div>
+      }
+    >
+      <p className="content-body">{post.body}</p>
 
-        {post && (
-          <>
+      <hr className="divider" />
+
+      <div className="stack">
+        <h2 className="section-title">Comments ({comments.length})</h2>
+        {comments.length === 0 ? (
+          <p className="empty-state">No comments yet.</p>
+        ) : (
+          <ul className="list">
+            {comments.map((comment) => (
+              <li key={comment.id} className="list-item">
+                <p className="content-body">{comment.body}</p>
+                <p className="meta">
+                  By user {comment.createdBy} on{" "}
+                  {new Date(comment.createdAt).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {currentUser ? (
+          <form className="form-grid" onSubmit={handleAddComment}>
+            <div className="field">
+              <label htmlFor="comment">Add a comment</label>
+              <textarea
+                id="comment"
+                value={newComment}
+                onChange={(event) => setNewComment(event.target.value)}
+                rows={4}
+                disabled={submitting}
+              />
+            </div>
             <button
-              onClick={() => {
-                if (window.confirm('Delete this post and all its comments?')) {
-                  fetch(`http://localhost:8080/posts/${post.id}`, { method: 'DELETE' })
-                    .then(res => {
-                      if (res.ok) {
-                        navigate(`/topics/${post.topic_id}`); // go back to topic
-                      } else {
-                        alert('Failed to delete post');
-                      }
-                    });
-                }
-              }}
-              style={{
-                marginLeft: '1rem',
-                background: 'none',
-                border: '1px solid #d32f2f',
-                color: '#d32f2f',
-                borderRadius: '3px',
-                padding: '0.2rem 0.5rem',
-                fontSize: '0.9rem',
-                cursor: 'pointer'
-              }}
+              className="button button--primary"
+              type="submit"
+              disabled={submitting || !newComment.trim()}
             >
-              Delete Post
+              {submitting ? "Posting..." : "Post Comment"}
             </button>
-
-	    <button
-		onClick={() => navigate(`/posts/${post.id}/edit`)}
-		style={{ marginLeft: '0.5rem' }}
-		>
- 		   Edit
-	    </button>
-          </>
+          </form>
+        ) : (
+          <Notice tone="info">Log in to join the discussion.</Notice>
         )}
       </div>
-
-      <h2>{post.title}</h2>
-      <p>{post.body}</p>
-      <small>
-        By user {post.created_by} • {new Date(post.created_at).toLocaleString()}
-      </small>
-
-      <hr style={{ margin: '2rem 0' }} />
-
-      <h3>Comments ({comments.length})</h3>
-
-      {comments.length === 0 ? (
-        <p>No comments yet.</p>
-      ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {comments.map(comment => (
-            <li
-              key={comment.id}
-              style={{
-                marginBottom: '1rem',
-                paddingBottom: '1rem',
-                borderBottom: '1px solid #eee'
-              }}
-            >
-              <p>{comment.body}</p>
-              <small>
-                By user {comment.created_by} • {new Date(comment.created_at).toLocaleString()}
-              </small>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {currentUser ? (
-        <form onSubmit={handleAddComment} style={{ marginTop: '2rem' }}>
-          <h4>Add a Comment</h4>
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Write your comment..."
-            rows={3}
-            style={{ width: '100%', padding: '0.5rem', marginBottom: '0.5rem' }}
-            disabled={submitting}
-          />
-          <button type="submit" disabled={!newComment.trim() || submitting}>
-            {submitting ? 'Posting...' : 'Post Comment'}
-          </button>
-        </form>
-      ) : (
-        <p>You must be logged in to comment.</p>
-      )}
-    </div>
+    </PageLayout>
   );
 };
 
 export default PostDetailPage;
-

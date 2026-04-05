@@ -1,170 +1,92 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-type CurrentUser = { id: number; username?: string } | null;
+import Notice from "../components/Notice";
+import PageLayout from "../components/PageLayout";
+import { useCurrentUser } from "../hooks/useCurrentUser";
+import { forumApi } from "../services/api/forumApi";
 
 export default function NewTopicPage() {
   const navigate = useNavigate();
-
+  const currentUser = useCurrentUser();
   const [form, setForm] = useState({ title: "", description: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const currentUser: CurrentUser = JSON.parse(
-    localStorage.getItem("currentUser") || "null"
-  );
-
-  const handleChange = (
-    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError("");
 
-    if (!currentUser) return setError("You must be logged in.");
-    if (!form.title.trim()) return setError("Title is required.");
+    if (!currentUser) {
+      setError("You must be logged in.");
+      return;
+    }
+
+    if (!form.title.trim()) {
+      setError("Title is required.");
+      return;
+    }
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8080/topics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: form.title.trim(),
-          description: form.description.trim(),
-          created_by: currentUser.id,
-        }),
+      const topic = await forumApi.createTopic({
+        title: form.title.trim(),
+        description: form.description.trim(),
+        createdBy: currentUser.id,
       });
-
-      if (!res.ok) throw new Error(await res.text());
-      navigate("/topics");
+      navigate(`/topics/${topic.id}`);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to create topic."
-      );
-      console.error("Error:", err);
+      setError(err instanceof Error ? err.message : "Failed to create topic.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'flex-start',
-      minHeight: '100vh',
-      backgroundColor: '#f5f7fa',
-      margin: 0,
-      fontFamily: 'Arial, sans-serif',
-      padding: '2rem 1rem'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '2rem',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        width: '100%',
-        maxWidth: '600px'
-      }}>
-        <h2 style={{ textAlign: 'center', margin: '0 0 1.5rem 0', color: '#333' }}>
-          Create New Topic
-        </h2>
+    <PageLayout title="Create Topic" subtitle="Set up a discussion area for related posts.">
+      {error ? <Notice tone="error">{error}</Notice> : null}
 
-        {error && (
-          <div style={{
-            backgroundColor: '#ffebee',
-            color: '#c62828',
-            padding: '0.75rem',
-            borderRadius: '4px',
-            marginBottom: '1.5rem',
-            textAlign: 'center'
-          }}>
-            {error}
-          </div>
-        )}
+      <form className="form-grid" onSubmit={handleSubmit}>
+        <div className="field">
+          <label htmlFor="title">Title</label>
+          <input
+            id="title"
+            name="title"
+            value={form.title}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, title: event.target.value }))
+            }
+            disabled={loading}
+          />
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1.25rem' }}>
-            <input
-              name="title"
-              placeholder="Title"
-              value={form.title}
-              onChange={handleChange}
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                fontSize: '1rem',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+        <div className="field">
+          <label htmlFor="description">Description</label>
+          <textarea
+            id="description"
+            name="description"
+            value={form.description}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, description: event.target.value }))
+            }
+            rows={5}
+            disabled={loading}
+          />
+        </div>
 
-          <div style={{ marginBottom: '1.5rem' }}>
-            <textarea
-              name="description"
-              placeholder="Description (optional)"
-              value={form.description}
-              onChange={handleChange}
-              disabled={loading}
-              rows={4}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                fontSize: '1rem',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                resize: 'vertical',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                backgroundColor: loading ? '#cccccc' : '#1976d2',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? 'Creating...' : 'Create'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate("/topics")}
-              disabled={loading}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                backgroundColor: '#f5f5f5',
-                color: '#333',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '1rem',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="form-actions">
+          <button className="button button--primary" type="submit" disabled={loading}>
+            {loading ? "Creating..." : "Create Topic"}
+          </button>
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={() => navigate("/topics")}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </PageLayout>
   );
 }

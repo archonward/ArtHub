@@ -57,7 +57,23 @@ Core endpoints preserved:
 - `GET /posts/:id/comments`
 - `POST /posts/:id/comments`
 
-Authorization scaffolding is intentionally lightweight for now. Update and delete handlers accept an optional `X-User-ID` header and reject mismatched owners. This keeps the current app usable while making a future auth layer easier to slot in.
+Successful responses now use a consistent envelope:
+
+```json
+{ "data": ... }
+```
+
+Error responses use:
+
+```json
+{ "error": { "message": "...", "code": "..." } }
+```
+
+Authorization scaffolding is still lightweight, but mutations are now explicit:
+
+- Topic edit/delete requires `X-User-ID` to match `created_by`
+- Post edit/delete requires `X-User-ID` to match `created_by`
+- Comments remain create/read only in this app version
 
 ## Local Setup
 

@@ -4,6 +4,7 @@ import type {
   CreateCommentInput,
   CreatePostInput,
   CreateTopicInput,
+  DeleteResultDto,
   Post,
   PostDto,
   Topic,
@@ -71,7 +72,7 @@ export const forumApi = {
   },
 
   deleteTopic: (id: number): Promise<void> =>
-    request<void>(`/topics/${id}`, { method: "DELETE" }),
+    request<DeleteResultDto>(`/topics/${id}`, { method: "DELETE" }).then(() => undefined),
 
   getPost: async (id: number): Promise<Post> => {
     const post = await request<PostDto>(`/posts/${id}`);
@@ -99,7 +100,7 @@ export const forumApi = {
   },
 
   deletePost: (id: number): Promise<void> =>
-    request<void>(`/posts/${id}`, { method: "DELETE" }),
+    request<DeleteResultDto>(`/posts/${id}`, { method: "DELETE" }).then(() => undefined),
 
   getPostComments: async (id: number): Promise<Comment[]> => {
     const comments = await request<CommentDto[]>(`/posts/${id}/comments`);

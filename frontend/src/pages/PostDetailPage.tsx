@@ -17,6 +17,8 @@ const PostDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     const parsedId = Number(postId);
@@ -44,16 +46,22 @@ const PostDetailPage: React.FC = () => {
     void fetchPost();
   }, [postId]);
 
+  const isOwner = currentUser?.id === post?.createdBy;
+
   const handleDelete = async () => {
     if (!post || !window.confirm("Delete this post and all its comments?")) {
       return;
     }
 
     try {
+      setActionError(null);
+      setDeleting(true);
       await forumApi.deletePost(post.id);
       navigate(`/topics/${post.topicId}`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete post.");
+      setActionError(err instanceof Error ? err.message : "Failed to delete post.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -66,6 +74,7 @@ const PostDetailPage: React.FC = () => {
 
     setSubmitting(true);
     try {
+      setActionError(null);
       const comment = await forumApi.createComment(post.id, {
         body: newComment.trim(),
         createdBy: currentUser.id,
@@ -73,7 +82,7 @@ const PostDetailPage: React.FC = () => {
       setComments((current) => [...current, comment]);
       setNewComment("");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to post comment.");
+      setActionError(err instanceof Error ? err.message : "Failed to post comment.");
     } finally {
       setSubmitting(false);
     }
@@ -104,18 +113,27 @@ const PostDetailPage: React.FC = () => {
           <button className="button button--secondary" onClick={() => navigate(-1)}>
             Back
           </button>
-          <button
-            className="button button--ghost"
-            onClick={() => navigate(`/posts/${post.id}/edit`)}
-          >
-            Edit
-          </button>
-          <button className="button button--danger" onClick={handleDelete}>
-            Delete
-          </button>
+          {isOwner ? (
+            <>
+              <button
+                className="button button--ghost"
+                disabled={deleting}
+                onClick={() => navigate(`/posts/${post.id}/edit`)}
+              >
+                Edit
+              </button>
+              <button className="button button--danger" disabled={deleting} onClick={handleDelete}>
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </>
+          ) : null}
         </div>
       }
     >
+      {actionError ? <Notice tone="error">{actionError}</Notice> : null}
+      {currentUser && !isOwner ? (
+        <Notice tone="info">Only the post owner can edit or delete this post.</Notice>
+      ) : null}
       <p className="content-body">{post.body}</p>
 
       <hr className="divider" />

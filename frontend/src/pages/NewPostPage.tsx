@@ -54,6 +54,7 @@ const NewPostPage: React.FC = () => {
 
   return (
     <PageLayout title="Create Post" subtitle="Add a new thread inside this topic.">
+      {!currentUser ? <Notice tone="info">Log in to create a post.</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <form className="form-grid" onSubmit={handleSubmit}>
@@ -63,7 +64,7 @@ const NewPostPage: React.FC = () => {
             id="title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            disabled={loading}
+            disabled={loading || !currentUser}
           />
         </div>
 
@@ -74,12 +75,12 @@ const NewPostPage: React.FC = () => {
             value={body}
             onChange={(event) => setBody(event.target.value)}
             rows={8}
-            disabled={loading}
+            disabled={loading || !currentUser}
           />
         </div>
 
         <div className="form-actions">
-          <button className="button button--primary" type="submit" disabled={loading}>
+          <button className="button button--primary" type="submit" disabled={loading || !currentUser}>
             {loading ? "Creating..." : "Create Post"}
           </button>
           <button

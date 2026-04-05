@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 )
@@ -38,7 +39,7 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 	`)
 	if err != nil {
 		log.Printf("GetTopics query failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load topics")
+		writeError(w, http.StatusInternalServerError, "topics_query_failed", "failed to load topics")
 		return
 	}
 	defer rows.Close()
@@ -48,7 +49,7 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 		var topic Topic
 		if err := rows.Scan(&topic.ID, &topic.Title, &topic.Description, &topic.CreatedBy, &topic.CreatedAt); err != nil {
 			log.Printf("GetTopics scan failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to parse topics")
+			writeError(w, http.StatusInternalServerError, "topics_parse_failed", "failed to parse topics")
 			return
 		}
 		topics = append(topics, topic)
@@ -56,7 +57,7 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 
 	if err := rows.Err(); err != nil {
 		log.Printf("GetTopics rows failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to read topics")
+		writeError(w, http.StatusInternalServerError, "topics_read_failed", "failed to read topics")
 		return
 	}
 
@@ -66,7 +67,7 @@ func GetTopics(w http.ResponseWriter, r *http.Request) {
 func GetTopicByID(w http.ResponseWriter, r *http.Request) {
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid topic id")
+		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
 		return
 	}
 
@@ -77,12 +78,12 @@ func GetTopicByID(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, topicID).Scan(&topic.ID, &topic.Title, &topic.Description, &topic.CreatedBy, &topic.CreatedAt)
 	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "topic not found")
+		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
 		return
 	}
 	if err != nil {
 		log.Printf("GetTopicByID failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load topic")
+		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to load topic")
 		return
 	}
 
@@ -97,7 +98,8 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		code, message := malformedJSONError(err)
+		writeError(w, http.StatusBadRequest, code, message)
 		return
 	}
 
@@ -105,11 +107,20 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 	input.Description = trimRequired(input.Description)
 
 	if input.Title == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "title is required")
 		return
 	}
 	if input.CreatedBy <= 0 {
-		writeError(w, http.StatusBadRequest, "valid created_by user ID is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "created_by must be a positive integer")
+		return
+	}
+	if err := ensureUserExists(input.CreatedBy); err != nil {
+		if errors.Is(err, errUserNotFound) {
+			writeError(w, http.StatusBadRequest, "invalid_created_by", "created_by user does not exist")
+			return
+		}
+		log.Printf("CreateTopic user lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "user_lookup_failed", "failed to verify user")
 		return
 	}
 
@@ -119,14 +130,14 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 	`, input.Title, input.Description, input.CreatedBy)
 	if err != nil {
 		log.Printf("CreateTopic insert failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to create topic")
+		writeError(w, http.StatusInternalServerError, "topic_create_failed", "failed to create topic")
 		return
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
 		log.Printf("CreateTopic lastInsertId failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to retrieve topic")
+		writeError(w, http.StatusInternalServerError, "topic_create_failed", "failed to retrieve topic")
 		return
 	}
 
@@ -138,7 +149,7 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 	`, id).Scan(&topic.ID, &topic.Title, &topic.Description, &topic.CreatedBy, &topic.CreatedAt)
 	if err != nil {
 		log.Printf("CreateTopic reload failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to retrieve topic")
+		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to retrieve topic")
 		return
 	}
 
@@ -148,7 +159,7 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid topic id")
+		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
 		return
 	}
 
@@ -159,17 +170,18 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, topicID).Scan(&existing.ID, &existing.Title, &existing.Description, &existing.CreatedBy, &existing.CreatedAt)
 	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "topic not found")
+		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
 		return
 	}
 	if err != nil {
 		log.Printf("UpdateTopic lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load topic")
+		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to load topic")
 		return
 	}
 
 	if err := requireOwnership(r, existing.CreatedBy); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
+		status, code, message := actorError(err)
+		writeError(w, status, code, message)
 		return
 	}
 
@@ -178,14 +190,15 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		code, message := malformedJSONError(err)
+		writeError(w, http.StatusBadRequest, code, message)
 		return
 	}
 
 	input.Title = trimRequired(input.Title)
 	input.Description = trimRequired(input.Description)
 	if input.Title == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "title is required")
 		return
 	}
 
@@ -195,7 +208,7 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, input.Title, input.Description, topicID); err != nil {
 		log.Printf("UpdateTopic update failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update topic")
+		writeError(w, http.StatusInternalServerError, "topic_update_failed", "failed to update topic")
 		return
 	}
 
@@ -207,60 +220,50 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 func DeleteTopic(w http.ResponseWriter, r *http.Request) {
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid topic id")
+		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
 		return
 	}
 
 	var ownerID int
 	if err := db().QueryRow(`SELECT created_by FROM topics WHERE id = ?`, topicID).Scan(&ownerID); err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "topic not found")
+		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
 		return
 	} else if err != nil {
 		log.Printf("DeleteTopic lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load topic")
+		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to load topic")
 		return
 	}
 
 	if err := requireOwnership(r, ownerID); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
+		status, code, message := actorError(err)
+		writeError(w, status, code, message)
 		return
 	}
 
 	tx, err := db().Begin()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to delete topic")
+		writeError(w, http.StatusInternalServerError, "topic_delete_failed", "failed to delete topic")
 		return
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`DELETE FROM comments WHERE post_id IN (SELECT id FROM posts WHERE topic_id = ?)`, topicID); err != nil {
-		log.Printf("DeleteTopic comments failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete topic comments")
-		return
-	}
-	if _, err := tx.Exec(`DELETE FROM posts WHERE topic_id = ?`, topicID); err != nil {
-		log.Printf("DeleteTopic posts failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete topic posts")
-		return
-	}
-
 	result, err := tx.Exec(`DELETE FROM topics WHERE id = ?`, topicID)
 	if err != nil {
 		log.Printf("DeleteTopic topic failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete topic")
+		writeError(w, http.StatusInternalServerError, "topic_delete_failed", "failed to delete topic")
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil || rowsAffected == 0 {
-		writeError(w, http.StatusNotFound, "topic not found")
+		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to finalize topic deletion")
+		writeError(w, http.StatusInternalServerError, "topic_delete_failed", "failed to finalize topic deletion")
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	writeNoContent(w)
 }

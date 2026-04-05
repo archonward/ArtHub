@@ -2,12 +2,14 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { forumApi } from "../services/api/forumApi";
 import type { Post, Topic } from "../types";
 
 const TopicDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,15 +69,20 @@ const TopicDetailPage: React.FC = () => {
           >
             New Post
           </button>
-          <button
-            className="button button--ghost"
-            onClick={() => navigate(`/topics/${topic.id}/edit`)}
-          >
-            Edit Topic
-          </button>
+          {currentUser?.id === topic.createdBy ? (
+            <button
+              className="button button--ghost"
+              onClick={() => navigate(`/topics/${topic.id}/edit`)}
+            >
+              Edit Topic
+            </button>
+          ) : null}
         </div>
       }
     >
+      {currentUser && currentUser.id !== topic.createdBy ? (
+        <Notice tone="info">Only the topic owner can edit this topic.</Notice>
+      ) : null}
       <p className="meta">
         Created by user {topic.createdBy} on {new Date(topic.createdAt).toLocaleString()}
       </p>

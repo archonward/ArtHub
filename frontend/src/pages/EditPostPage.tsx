@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { forumApi } from "../services/api/forumApi";
 
 const EditPostPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
   const parsedPostId = Number(postId);
 
   const [title, setTitle] = useState("");
@@ -14,6 +16,7 @@ const EditPostPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!parsedPostId) {
@@ -27,6 +30,7 @@ const EditPostPage: React.FC = () => {
         const post = await forumApi.getPost(parsedPostId);
         setTitle(post.title);
         setBody(post.body);
+        setOwnerId(post.createdBy);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load post.");
       } finally {
@@ -36,6 +40,8 @@ const EditPostPage: React.FC = () => {
 
     void fetchPost();
   }, [parsedPostId]);
+
+  const isOwner = ownerId !== null && currentUser?.id === ownerId;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -62,13 +68,21 @@ const EditPostPage: React.FC = () => {
   return (
     <PageLayout title="Edit Post" subtitle="Revise the title and body for this post.">
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {ownerId !== null && !isOwner ? (
+        <Notice tone="error">You cannot edit a post you do not own.</Notice>
+      ) : null}
       {loading ? (
         <p className="empty-state">Loading post...</p>
       ) : (
         <form className="form-grid" onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="title">Title</label>
-            <input id="title" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input
+              id="title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              disabled={submitting || !isOwner}
+            />
           </div>
 
           <div className="field">
@@ -78,11 +92,12 @@ const EditPostPage: React.FC = () => {
               value={body}
               onChange={(event) => setBody(event.target.value)}
               rows={8}
+              disabled={submitting || !isOwner}
             />
           </div>
 
           <div className="form-actions">
-            <button className="button button--primary" type="submit" disabled={submitting}>
+            <button className="button button--primary" type="submit" disabled={submitting || !isOwner}>
               {submitting ? "Saving..." : "Save Changes"}
             </button>
             <button

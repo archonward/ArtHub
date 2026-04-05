@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { forumApi } from "../services/api/forumApi";
 
 const EditTopicPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
   const topicId = Number(id);
 
   const [title, setTitle] = useState("");
@@ -14,6 +16,7 @@ const EditTopicPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!topicId) {
@@ -27,6 +30,7 @@ const EditTopicPage: React.FC = () => {
         const topic = await forumApi.getTopic(topicId);
         setTitle(topic.title);
         setDescription(topic.description);
+        setOwnerId(topic.createdBy);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load topic.");
       } finally {
@@ -36,6 +40,8 @@ const EditTopicPage: React.FC = () => {
 
     void fetchTopic();
   }, [topicId]);
+
+  const isOwner = ownerId !== null && currentUser?.id === ownerId;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -61,13 +67,21 @@ const EditTopicPage: React.FC = () => {
   return (
     <PageLayout title="Edit Topic" subtitle="Update the topic title or description.">
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {ownerId !== null && !isOwner ? (
+        <Notice tone="error">You cannot edit a topic you do not own.</Notice>
+      ) : null}
       {loading ? (
         <p className="empty-state">Loading topic...</p>
       ) : (
         <form className="form-grid" onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="title">Title</label>
-            <input id="title" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input
+              id="title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              disabled={submitting || !isOwner}
+            />
           </div>
 
           <div className="field">
@@ -77,11 +91,12 @@ const EditTopicPage: React.FC = () => {
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={5}
+              disabled={submitting || !isOwner}
             />
           </div>
 
           <div className="form-actions">
-            <button className="button button--primary" type="submit" disabled={submitting}>
+            <button className="button button--primary" type="submit" disabled={submitting || !isOwner}>
               {submitting ? "Saving..." : "Save Changes"}
             </button>
             <button

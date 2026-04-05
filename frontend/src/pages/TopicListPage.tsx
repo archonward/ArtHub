@@ -3,14 +3,18 @@ import { useNavigate } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
 import { CURRENT_USER_STORAGE_KEY } from "../constants/storage";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 import { forumApi } from "../services/api/forumApi";
 import type { Topic } from "../types";
 
 const TopicListPage: React.FC = () => {
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingTopicId, setDeletingTopicId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchTopics = async () => {
@@ -32,10 +36,14 @@ const TopicListPage: React.FC = () => {
     }
 
     try {
+      setActionError(null);
+      setDeletingTopicId(topicId);
       await forumApi.deleteTopic(topicId);
       setTopics((current) => current.filter((topic) => topic.id !== topicId));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete topic.");
+      setActionError(err instanceof Error ? err.message : "Failed to delete topic.");
+    } finally {
+      setDeletingTopicId(null);
     }
   };
 
@@ -61,6 +69,7 @@ const TopicListPage: React.FC = () => {
       }
     >
       {error ? <Notice tone="error">{error}</Notice> : null}
+      {actionError ? <Notice tone="error">{actionError}</Notice> : null}
       {loading ? <p className="empty-state">Loading topics...</p> : null}
 
       {!loading && topics.length === 0 ? (
@@ -84,15 +93,18 @@ const TopicListPage: React.FC = () => {
                     {new Date(topic.createdAt).toLocaleString()}
                   </p>
                 </div>
-                <button
-                  className="button button--danger"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleDelete(topic.id);
-                  }}
-                >
-                  Delete
-                </button>
+                {currentUser?.id === topic.createdBy ? (
+                  <button
+                    className="button button--danger"
+                    disabled={deletingTopicId === topic.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleDelete(topic.id);
+                    }}
+                  >
+                    {deletingTopicId === topic.id ? "Deleting..." : "Delete"}
+                  </button>
+                ) : null}
               </div>
             </li>
           ))}

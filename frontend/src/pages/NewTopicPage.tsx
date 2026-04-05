@@ -43,6 +43,7 @@ export default function NewTopicPage() {
 
   return (
     <PageLayout title="Create Topic" subtitle="Set up a discussion area for related posts.">
+      {!currentUser ? <Notice tone="info">Log in to create a topic.</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <form className="form-grid" onSubmit={handleSubmit}>
@@ -55,7 +56,7 @@ export default function NewTopicPage() {
             onChange={(event) =>
               setForm((current) => ({ ...current, title: event.target.value }))
             }
-            disabled={loading}
+            disabled={loading || !currentUser}
           />
         </div>
 
@@ -69,12 +70,12 @@ export default function NewTopicPage() {
               setForm((current) => ({ ...current, description: event.target.value }))
             }
             rows={5}
-            disabled={loading}
+            disabled={loading || !currentUser}
           />
         </div>
 
         <div className="form-actions">
-          <button className="button button--primary" type="submit" disabled={loading}>
+          <button className="button button--primary" type="submit" disabled={loading || !currentUser}>
             {loading ? "Creating..." : "Create Topic"}
           </button>
           <button

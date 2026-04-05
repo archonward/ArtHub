@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 )
@@ -33,18 +34,18 @@ func PostResource(w http.ResponseWriter, r *http.Request) {
 func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid topic id")
+		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
 		return
 	}
 
 	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID)
 	if err != nil {
 		log.Printf("GetPostsByTopic topic lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to verify topic")
+		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to verify topic")
 		return
 	}
 	if !exists {
-		writeError(w, http.StatusNotFound, "topic not found")
+		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
 		return
 	}
 
@@ -56,7 +57,7 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 	`, topicID)
 	if err != nil {
 		log.Printf("GetPostsByTopic query failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
+		writeError(w, http.StatusInternalServerError, "posts_query_failed", "failed to fetch posts")
 		return
 	}
 	defer rows.Close()
@@ -66,7 +67,7 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 		var post Post
 		if err := rows.Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt); err != nil {
 			log.Printf("GetPostsByTopic scan failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to parse posts")
+			writeError(w, http.StatusInternalServerError, "posts_parse_failed", "failed to parse posts")
 			return
 		}
 		posts = append(posts, post)
@@ -74,7 +75,7 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 
 	if err := rows.Err(); err != nil {
 		log.Printf("GetPostsByTopic rows failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to read posts")
+		writeError(w, http.StatusInternalServerError, "posts_read_failed", "failed to read posts")
 		return
 	}
 
@@ -84,7 +85,7 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 func GetPostByID(w http.ResponseWriter, r *http.Request) {
 	postID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid post id")
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
 		return
 	}
 
@@ -95,12 +96,12 @@ func GetPostByID(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, postID).Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
 	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "post not found")
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
 	}
 	if err != nil {
 		log.Printf("GetPostByID failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load post")
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to load post")
 		return
 	}
 
@@ -110,18 +111,18 @@ func GetPostByID(w http.ResponseWriter, r *http.Request) {
 func CreatePost(w http.ResponseWriter, r *http.Request) {
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid topic id")
+		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
 		return
 	}
 
 	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID)
 	if err != nil {
 		log.Printf("CreatePost topic lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to verify topic")
+		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to verify topic")
 		return
 	}
 	if !exists {
-		writeError(w, http.StatusNotFound, "topic not found")
+		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
 		return
 	}
 
@@ -131,22 +132,32 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 		CreatedBy int    `json:"created_by"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		code, message := malformedJSONError(err)
+		writeError(w, http.StatusBadRequest, code, message)
 		return
 	}
 
 	input.Title = trimRequired(input.Title)
 	input.Body = trimRequired(input.Body)
 	if input.Title == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "title is required")
 		return
 	}
 	if input.Body == "" {
-		writeError(w, http.StatusBadRequest, "body is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "body is required")
 		return
 	}
 	if input.CreatedBy <= 0 {
-		writeError(w, http.StatusBadRequest, "valid created_by user ID is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "created_by must be a positive integer")
+		return
+	}
+	if err := ensureUserExists(input.CreatedBy); err != nil {
+		if errors.Is(err, errUserNotFound) {
+			writeError(w, http.StatusBadRequest, "invalid_created_by", "created_by user does not exist")
+			return
+		}
+		log.Printf("CreatePost user lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "user_lookup_failed", "failed to verify user")
 		return
 	}
 
@@ -156,13 +167,13 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 	`, topicID, input.Title, input.Body, input.CreatedBy)
 	if err != nil {
 		log.Printf("CreatePost insert failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to create post")
+		writeError(w, http.StatusInternalServerError, "post_create_failed", "failed to create post")
 		return
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to retrieve post")
+		writeError(w, http.StatusInternalServerError, "post_create_failed", "failed to retrieve post")
 		return
 	}
 
@@ -174,7 +185,7 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 	`, id).Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
 	if err != nil {
 		log.Printf("CreatePost reload failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to retrieve post")
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to retrieve post")
 		return
 	}
 
@@ -184,7 +195,7 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 func UpdatePost(w http.ResponseWriter, r *http.Request) {
 	postID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid post id")
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
 		return
 	}
 
@@ -195,17 +206,18 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, postID).Scan(&existing.ID, &existing.TopicID, &existing.Title, &existing.Body, &existing.CreatedBy, &existing.CreatedAt)
 	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "post not found")
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
 	}
 	if err != nil {
 		log.Printf("UpdatePost lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load post")
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to load post")
 		return
 	}
 
 	if err := requireOwnership(r, existing.CreatedBy); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
+		status, code, message := actorError(err)
+		writeError(w, status, code, message)
 		return
 	}
 
@@ -214,14 +226,15 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 		Body  string `json:"body"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		code, message := malformedJSONError(err)
+		writeError(w, http.StatusBadRequest, code, message)
 		return
 	}
 
 	input.Title = trimRequired(input.Title)
 	input.Body = trimRequired(input.Body)
 	if input.Title == "" || input.Body == "" {
-		writeError(w, http.StatusBadRequest, "title and body are required")
+		writeError(w, http.StatusBadRequest, "validation_error", "title and body are required")
 		return
 	}
 
@@ -231,7 +244,7 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 		WHERE id = ?
 	`, input.Title, input.Body, postID); err != nil {
 		log.Printf("UpdatePost update failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to update post")
+		writeError(w, http.StatusInternalServerError, "post_update_failed", "failed to update post")
 		return
 	}
 
@@ -243,55 +256,50 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 func DeletePost(w http.ResponseWriter, r *http.Request) {
 	postID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid post id")
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
 		return
 	}
 
 	var ownerID int
 	if err := db().QueryRow(`SELECT created_by FROM posts WHERE id = ?`, postID).Scan(&ownerID); err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "post not found")
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
 	} else if err != nil {
 		log.Printf("DeletePost lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to load post")
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to load post")
 		return
 	}
 
 	if err := requireOwnership(r, ownerID); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
+		status, code, message := actorError(err)
+		writeError(w, status, code, message)
 		return
 	}
 
 	tx, err := db().Begin()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to delete post")
+		writeError(w, http.StatusInternalServerError, "post_delete_failed", "failed to delete post")
 		return
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(`DELETE FROM comments WHERE post_id = ?`, postID); err != nil {
-		log.Printf("DeletePost comments failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete post comments")
-		return
-	}
-
 	result, err := tx.Exec(`DELETE FROM posts WHERE id = ?`, postID)
 	if err != nil {
 		log.Printf("DeletePost post failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to delete post")
+		writeError(w, http.StatusInternalServerError, "post_delete_failed", "failed to delete post")
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil || rowsAffected == 0 {
-		writeError(w, http.StatusNotFound, "post not found")
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to finalize post deletion")
+		writeError(w, http.StatusInternalServerError, "post_delete_failed", "failed to finalize post deletion")
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	writeNoContent(w)
 }

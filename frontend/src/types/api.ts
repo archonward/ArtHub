@@ -1,5 +1,16 @@
 import type { Comment, Post, Topic, User } from "./models";
 
+export interface ApiResponseEnvelope<T> {
+  data: T;
+}
+
+export interface ApiErrorEnvelope {
+  error: {
+    message: string;
+    code: string;
+  };
+}
+
 export interface UserDto {
   id: number;
   username: string;
@@ -55,6 +66,10 @@ export interface UpdatePostInput {
 export interface CreateCommentInput {
   body: string;
   createdBy: number;
+}
+
+export interface DeleteResultDto {
+  deleted: boolean;
 }
 
 export const mapUser = (dto: UserDto): User => ({

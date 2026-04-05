@@ -36,7 +36,7 @@ const LoginPage: React.FC = () => {
 
   return (
     <PageLayout
-      title="CampusCommons"
+      title="ArtHub"
       subtitle="Enter a username to create or resume a lightweight local session."
       narrow
     >

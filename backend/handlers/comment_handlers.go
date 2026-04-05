@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 )
@@ -19,18 +20,18 @@ func PostCommentsResource(w http.ResponseWriter, r *http.Request) {
 func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 	postID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid post id")
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
 		return
 	}
 
 	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID)
 	if err != nil {
 		log.Printf("GetCommentsByPost post lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to verify post")
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to verify post")
 		return
 	}
 	if !exists {
-		writeError(w, http.StatusNotFound, "post not found")
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
 	}
 
@@ -42,7 +43,7 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 	`, postID)
 	if err != nil {
 		log.Printf("GetCommentsByPost query failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to fetch comments")
+		writeError(w, http.StatusInternalServerError, "comments_query_failed", "failed to fetch comments")
 		return
 	}
 	defer rows.Close()
@@ -52,7 +53,7 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 		var comment Comment
 		if err := rows.Scan(&comment.ID, &comment.PostID, &comment.Body, &comment.CreatedBy, &comment.CreatedAt); err != nil {
 			log.Printf("GetCommentsByPost scan failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to parse comments")
+			writeError(w, http.StatusInternalServerError, "comments_parse_failed", "failed to parse comments")
 			return
 		}
 		comments = append(comments, comment)
@@ -60,7 +61,7 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 
 	if err := rows.Err(); err != nil {
 		log.Printf("GetCommentsByPost rows failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to read comments")
+		writeError(w, http.StatusInternalServerError, "comments_read_failed", "failed to read comments")
 		return
 	}
 
@@ -70,18 +71,18 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 func CreateComment(w http.ResponseWriter, r *http.Request) {
 	postID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid post id")
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
 		return
 	}
 
 	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID)
 	if err != nil {
 		log.Printf("CreateComment post lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to verify post")
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to verify post")
 		return
 	}
 	if !exists {
-		writeError(w, http.StatusNotFound, "post not found")
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
 	}
 
@@ -90,17 +91,27 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 		CreatedBy int    `json:"created_by"`
 	}
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		code, message := malformedJSONError(err)
+		writeError(w, http.StatusBadRequest, code, message)
 		return
 	}
 
 	input.Body = trimRequired(input.Body)
 	if input.Body == "" {
-		writeError(w, http.StatusBadRequest, "comment body is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "comment body is required")
 		return
 	}
 	if input.CreatedBy <= 0 {
-		writeError(w, http.StatusBadRequest, "valid created_by user ID is required")
+		writeError(w, http.StatusBadRequest, "validation_error", "created_by must be a positive integer")
+		return
+	}
+	if err := ensureUserExists(input.CreatedBy); err != nil {
+		if errors.Is(err, errUserNotFound) {
+			writeError(w, http.StatusBadRequest, "invalid_created_by", "created_by user does not exist")
+			return
+		}
+		log.Printf("CreateComment user lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "user_lookup_failed", "failed to verify user")
 		return
 	}
 
@@ -110,13 +121,13 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 	`, postID, input.Body, input.CreatedBy)
 	if err != nil {
 		log.Printf("CreateComment insert failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to create comment")
+		writeError(w, http.StatusInternalServerError, "comment_create_failed", "failed to create comment")
 		return
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to retrieve comment")
+		writeError(w, http.StatusInternalServerError, "comment_create_failed", "failed to retrieve comment")
 		return
 	}
 
@@ -128,7 +139,7 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 	`, id).Scan(&comment.ID, &comment.PostID, &comment.Body, &comment.CreatedBy, &comment.CreatedAt)
 	if err != nil {
 		log.Printf("CreateComment reload failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "failed to retrieve comment")
+		writeError(w, http.StatusInternalServerError, "comment_query_failed", "failed to retrieve comment")
 		return
 	}
 

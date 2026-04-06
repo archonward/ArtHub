@@ -31,6 +31,8 @@ export interface PostDto {
   body: string;
   created_by: number;
   created_at: string;
+  vote_score: number;
+  current_user_vote: -1 | 1 | null;
 }
 
 export interface CommentDto {
@@ -65,6 +67,10 @@ export interface CreateCommentInput {
   body: string;
 }
 
+export interface VoteInput {
+  value: -1 | 1;
+}
+
 export interface DeleteResultDto {
   deleted: boolean;
 }
@@ -89,6 +95,8 @@ export const mapPost = (dto: PostDto): Post => ({
   body: dto.body,
   createdBy: dto.created_by,
   createdAt: dto.created_at,
+  voteScore: dto.vote_score ?? 0,
+  currentUserVote: dto.current_user_vote ?? null,
 });
 
 export const mapComment = (dto: CommentDto): Comment => ({

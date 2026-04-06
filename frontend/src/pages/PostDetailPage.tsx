@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
+import PostVoteControls from "../components/PostVoteControls";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
 import type { Comment, Post } from "../types";
@@ -59,7 +60,9 @@ const PostDetailPage: React.FC = () => {
       await forumApi.deletePost(post.id);
       navigate(`/topics/${post.topicId}`);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete post.");
+      setActionError(
+        err instanceof Error ? err.message : "Failed to delete post.",
+      );
     } finally {
       setDeleting(false);
     }
@@ -81,7 +84,9 @@ const PostDetailPage: React.FC = () => {
       setComments((current) => [...current, comment]);
       setNewComment("");
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to post comment.");
+      setActionError(
+        err instanceof Error ? err.message : "Failed to post comment.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -109,7 +114,10 @@ const PostDetailPage: React.FC = () => {
       subtitle={`Created by user ${post.createdBy} on ${new Date(post.createdAt).toLocaleString()}`}
       actions={
         <div className="action-row">
-          <button className="button button--secondary" onClick={() => navigate(-1)}>
+          <button
+            className="button button--secondary"
+            onClick={() => navigate(-1)}
+          >
             Back
           </button>
           {isOwner ? (
@@ -121,7 +129,11 @@ const PostDetailPage: React.FC = () => {
               >
                 Edit
               </button>
-              <button className="button button--danger" disabled={deleting} onClick={handleDelete}>
+              <button
+                className="button button--danger"
+                disabled={deleting}
+                onClick={handleDelete}
+              >
                 {deleting ? "Deleting..." : "Delete"}
               </button>
             </>
@@ -134,8 +146,14 @@ const PostDetailPage: React.FC = () => {
         <Notice tone="info">Log in to comment on this post.</Notice>
       ) : null}
       {currentUser && !isOwner ? (
-        <Notice tone="info">Only the post owner can edit or delete this post.</Notice>
+        <Notice tone="info">
+          Only the post owner can edit or delete this post.
+        </Notice>
       ) : null}
+      <PostVoteControls
+        post={post}
+        onPostChange={(updatedPost) => setPost(updatedPost)}
+      />
       <p className="content-body">{post.body}</p>
 
       <hr className="divider" />

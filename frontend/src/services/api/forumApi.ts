@@ -14,6 +14,7 @@ import type {
   UpdateTopicInput,
   User,
   UserDto,
+  VoteInput,
 } from "../../types";
 import { mapComment, mapPost, mapTopic, mapUser } from "../../types";
 import { request } from "./client";
@@ -93,14 +94,19 @@ export const forumApi = {
   },
 
   deleteTopic: (id: number): Promise<void> =>
-    request<DeleteResultDto>(`/topics/${id}`, { method: "DELETE" }).then(() => undefined),
+    request<DeleteResultDto>(`/topics/${id}`, { method: "DELETE" }).then(
+      () => undefined,
+    ),
 
   getPost: async (id: number): Promise<Post> => {
     const post = await request<PostDto>(`/posts/${id}`);
     return mapPost(post);
   },
 
-  createPost: async (topicId: number, input: CreatePostInput): Promise<Post> => {
+  createPost: async (
+    topicId: number,
+    input: CreatePostInput,
+  ): Promise<Post> => {
     const post = await request<PostDto>(`/topics/${topicId}/posts`, {
       method: "POST",
       body: {
@@ -120,7 +126,24 @@ export const forumApi = {
   },
 
   deletePost: (id: number): Promise<void> =>
-    request<DeleteResultDto>(`/posts/${id}`, { method: "DELETE" }).then(() => undefined),
+    request<DeleteResultDto>(`/posts/${id}`, { method: "DELETE" }).then(
+      () => undefined,
+    ),
+
+  voteOnPost: async (id: number, input: VoteInput): Promise<Post> => {
+    const post = await request<PostDto>(`/posts/${id}/vote`, {
+      method: "POST",
+      body: input,
+    });
+    return mapPost(post);
+  },
+
+  removePostVote: async (id: number): Promise<Post> => {
+    const post = await request<PostDto>(`/posts/${id}/vote`, {
+      method: "DELETE",
+    });
+    return mapPost(post);
+  },
 
   getPostComments: async (id: number): Promise<Comment[]> => {
     const comments = await request<CommentDto[]>(`/posts/${id}/comments`);

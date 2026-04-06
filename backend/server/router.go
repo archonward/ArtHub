@@ -21,6 +21,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("/topics/{id}/posts", handlers.OptionalSessionAuth(handlers.TopicPostsResource))
 	mux.HandleFunc("/posts/{id}", handlers.OptionalSessionAuth(handlers.PostResource))
 	mux.HandleFunc("/posts/{id}/comments", handlers.OptionalSessionAuth(handlers.PostCommentsResource))
+	mux.HandleFunc("/posts/{id}/vote", handlers.OptionalSessionAuth(handlers.PostVoteResource))
 
 	allowedOrigin := os.Getenv("CAMPUSCOMMONS_ALLOWED_ORIGIN")
 	if allowedOrigin == "" {
@@ -28,9 +29,9 @@ func NewHandler() http.Handler {
 	}
 
 	c := cors.New(cors.Options{
-		AllowedOrigins: []string{allowedOrigin},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "Authorization"},
+		AllowedOrigins:   []string{allowedOrigin},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
 	})
 

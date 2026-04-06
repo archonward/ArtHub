@@ -332,3 +332,230 @@ func TestCreateCommentUsesAuthenticatedUserInsteadOfCreatedByPayload(t *testing.
 		t.Fatalf("expected created_by=%d, got %+v", commenter.ID, comment)
 	}
 }
+
+func TestVoteOnPostRequiresAuthentication(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by)
+		VALUES (1, 'First post', 'Body copy', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert post: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/posts/1/vote", bytes.NewReader([]byte(`{"value":1}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	VoteOnPost(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", recorder.Code)
+	}
+}
+
+func TestVoteOnPostReturnsUpdatedVoteSummary(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voter, voterCookie := signupAndSessionCookie(t, "voter")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by)
+		VALUES (1, 'First post', 'Body copy', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert post: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/posts/1/vote", bytes.NewReader([]byte(`{"value":1}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(voterCookie)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	VoteOnPost(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	post := decodeSuccessEnvelope[Post](t, recorder)
+	if post.VoteScore != 1 {
+		t.Fatalf("expected vote_score=1, got %+v", post)
+	}
+	if post.CurrentUserVote == nil || *post.CurrentUserVote != 1 {
+		t.Fatalf("expected current_user_vote=1, got %+v", post)
+	}
+
+	var rowCount int
+	if err := db().QueryRow(`SELECT COUNT(*) FROM votes WHERE user_id = ? AND post_id = 1`, voter.ID).Scan(&rowCount); err != nil {
+		t.Fatalf("count votes: %v", err)
+	}
+	if rowCount != 1 {
+		t.Fatalf("expected one vote row, got %d", rowCount)
+	}
+}
+
+func TestVoteOnPostSwitchesExistingVote(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voter, voterCookie := signupAndSessionCookie(t, "voter")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by)
+		VALUES (1, 'First post', 'Body copy', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert post: %v", err)
+	}
+
+	firstReq := httptest.NewRequest(http.MethodPost, "/posts/1/vote", bytes.NewReader([]byte(`{"value":1}`)))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstReq.AddCookie(voterCookie)
+	firstReq.SetPathValue("id", "1")
+	firstRecorder := httptest.NewRecorder()
+	VoteOnPost(firstRecorder, firstReq)
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/posts/1/vote", bytes.NewReader([]byte(`{"value":-1}`)))
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondReq.AddCookie(voterCookie)
+	secondReq.SetPathValue("id", "1")
+	secondRecorder := httptest.NewRecorder()
+	VoteOnPost(secondRecorder, secondReq)
+
+	if secondRecorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", secondRecorder.Code)
+	}
+
+	post := decodeSuccessEnvelope[Post](t, secondRecorder)
+	if post.VoteScore != -1 {
+		t.Fatalf("expected vote_score=-1, got %+v", post)
+	}
+	if post.CurrentUserVote == nil || *post.CurrentUserVote != -1 {
+		t.Fatalf("expected current_user_vote=-1, got %+v", post)
+	}
+
+	var storedVote int
+	if err := db().QueryRow(`SELECT vote_value FROM votes WHERE user_id = ? AND post_id = 1`, voter.ID).Scan(&storedVote); err != nil {
+		t.Fatalf("select vote: %v", err)
+	}
+	if storedVote != -1 {
+		t.Fatalf("expected stored vote -1, got %d", storedVote)
+	}
+}
+
+func TestVoteOnPostIsIdempotentForSameValue(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voter, voterCookie := signupAndSessionCookie(t, "voter")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by)
+		VALUES (1, 'First post', 'Body copy', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert post: %v", err)
+	}
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodPost, "/posts/1/vote", bytes.NewReader([]byte(`{"value":1}`)))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(voterCookie)
+		req.SetPathValue("id", "1")
+		recorder := httptest.NewRecorder()
+		VoteOnPost(recorder, req)
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", recorder.Code)
+		}
+	}
+
+	var rowCount int
+	if err := db().QueryRow(`SELECT COUNT(*) FROM votes WHERE user_id = ? AND post_id = 1`, voter.ID).Scan(&rowCount); err != nil {
+		t.Fatalf("count votes: %v", err)
+	}
+	if rowCount != 1 {
+		t.Fatalf("expected one vote row, got %d", rowCount)
+	}
+
+	var voteScore int
+	if err := db().QueryRow(`SELECT COALESCE(SUM(vote_value), 0) FROM votes WHERE post_id = 1`).Scan(&voteScore); err != nil {
+		t.Fatalf("sum votes: %v", err)
+	}
+	if voteScore != 1 {
+		t.Fatalf("expected vote score 1, got %d", voteScore)
+	}
+}
+
+func TestDeletePostVoteRemovesCurrentUsersVote(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voter, voterCookie := signupAndSessionCookie(t, "voter")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by)
+		VALUES (1, 'First post', 'Body copy', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert post: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO votes (user_id, post_id, vote_value)
+		VALUES (?, 1, 1)
+	`, voter.ID); err != nil {
+		t.Fatalf("insert vote: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/posts/1/vote", nil)
+	req.AddCookie(voterCookie)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	DeletePostVote(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	post := decodeSuccessEnvelope[Post](t, recorder)
+	if post.VoteScore != 0 {
+		t.Fatalf("expected vote_score=0, got %+v", post)
+	}
+	if post.CurrentUserVote != nil {
+		t.Fatalf("expected current_user_vote to be nil, got %+v", post)
+	}
+}

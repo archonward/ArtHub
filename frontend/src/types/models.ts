@@ -18,6 +18,8 @@ export interface Post {
   body: string;
   createdBy: number;
   createdAt: string;
+  voteScore: number;
+  currentUserVote: -1 | 1 | null;
 }
 
 export interface Comment {

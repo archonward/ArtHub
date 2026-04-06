@@ -29,7 +29,7 @@ func InitDB() error {
 		return err
 	}
 
-	if err := DB.Ping(); err != nil {			// Test the connection
+	if err := DB.Ping(); err != nil { // Test the connection
 		return err
 	}
 
@@ -89,6 +89,18 @@ func CreateSchema(db *sql.DB) error {
 		FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE RESTRICT
 	);
 
+	CREATE TABLE IF NOT EXISTS votes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		post_id INTEGER NOT NULL,
+		vote_value INTEGER NOT NULL CHECK(vote_value IN (-1, 1)),
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(user_id, post_id),
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+		FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_topics_created_by ON topics(created_by);
 	CREATE INDEX IF NOT EXISTS idx_topics_created_at ON topics(created_at);
 	CREATE INDEX IF NOT EXISTS idx_posts_topic_id ON posts(topic_id);
@@ -97,6 +109,8 @@ func CreateSchema(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
 	CREATE INDEX IF NOT EXISTS idx_comments_created_by ON comments(created_by);
 	CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at);
+	CREATE INDEX IF NOT EXISTS idx_votes_post_id ON votes(post_id);
+	CREATE INDEX IF NOT EXISTS idx_votes_user_id ON votes(user_id);
 
 	CREATE TRIGGER IF NOT EXISTS trg_topics_delete_posts
 	AFTER DELETE ON topics
@@ -108,6 +122,14 @@ func CreateSchema(db *sql.DB) error {
 	AFTER DELETE ON posts
 	BEGIN
 		DELETE FROM comments WHERE post_id = OLD.id;
+	END;
+
+	CREATE TRIGGER IF NOT EXISTS trg_votes_set_updated_at
+	AFTER UPDATE ON votes
+	BEGIN
+		UPDATE votes
+		SET updated_at = CURRENT_TIMESTAMP
+		WHERE id = NEW.id;
 	END;
 	`
 

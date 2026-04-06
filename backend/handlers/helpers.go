@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -23,8 +22,6 @@ type ResponseEnvelope[T any] struct {
 type ErrorResponseEnvelope struct {
 	Error ErrorDetail `json:"error"`
 }
-
-var errUserNotFound = errors.New("user not found")
 
 func Health(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -102,44 +99,6 @@ func trimRequired(value string) string {
 	return strings.TrimSpace(value)
 }
 
-func optionalActorID(r *http.Request) (int, error) {
-	raw := strings.TrimSpace(r.Header.Get("X-User-ID"))
-	if raw == "" {
-		return 0, nil
-	}
-
-	id, err := strconv.Atoi(raw)
-	if err != nil || id <= 0 {
-		return 0, errors.New("invalid X-User-ID header")
-	}
-
-	return id, nil
-}
-
-func requireActorID(r *http.Request) (int, error) {
-	actorID, err := optionalActorID(r)
-	if err != nil {
-		return 0, err
-	}
-	if actorID == 0 {
-		return 0, errors.New("X-User-ID header is required")
-	}
-	return actorID, nil
-}
-
-func requireOwnership(r *http.Request, ownerID int) error {
-	actorID, err := requireActorID(r)
-	if err != nil {
-		return err
-	}
-
-	if actorID != ownerID {
-		return errors.New("you are not allowed to modify this resource")
-	}
-
-	return nil
-}
-
 func resourceExists(query string, id int) (bool, error) {
 	var exists bool
 	err := db().QueryRow(query, id).Scan(&exists)
@@ -167,30 +126,13 @@ func malformedJSONError(err error) (string, string) {
 	}
 }
 
-func actorError(err error) (int, string, string) {
-	switch err.Error() {
-	case "X-User-ID header is required":
-		return http.StatusUnauthorized, "actor_required", "X-User-ID header is required"
-	case "invalid X-User-ID header":
-		return http.StatusBadRequest, "invalid_actor_id", "X-User-ID header must be a positive integer"
-	case "you are not allowed to modify this resource":
+func authError(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, errAuthenticationRequired):
+		return http.StatusUnauthorized, "not_authenticated", "authentication required"
+	case errors.Is(err, errForbidden):
 		return http.StatusForbidden, "forbidden", "you are not allowed to modify this resource"
 	default:
-		return http.StatusForbidden, "forbidden", err.Error()
+		return http.StatusInternalServerError, "authorization_failed", "failed to authorize request"
 	}
-}
-
-func userExists(userID int) (bool, error) {
-	return resourceExists("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID)
-}
-
-func ensureUserExists(userID int) error {
-	exists, err := userExists(userID)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return fmt.Errorf("%w: %d", errUserNotFound, userID)
-	}
-	return nil
 }

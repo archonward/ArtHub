@@ -44,7 +44,6 @@ export interface CommentDto {
 export interface CreateTopicInput {
   title: string;
   description: string;
-  createdBy: number;
 }
 
 export interface UpdateTopicInput {
@@ -55,7 +54,6 @@ export interface UpdateTopicInput {
 export interface CreatePostInput {
   title: string;
   body: string;
-  createdBy: number;
 }
 
 export interface UpdatePostInput {
@@ -65,7 +63,6 @@ export interface UpdatePostInput {
 
 export interface CreateCommentInput {
   body: string;
-  createdBy: number;
 }
 
 export interface DeleteResultDto {

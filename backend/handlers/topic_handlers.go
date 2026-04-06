@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"errors"
 	"log"
 	"net/http"
 )
@@ -91,6 +90,13 @@ func GetTopicByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateTopic(w http.ResponseWriter, r *http.Request) {
+	user, err := requireAuthenticatedUser(r)
+	if err != nil {
+		status, code, message := authError(err)
+		writeError(w, status, code, message)
+		return
+	}
+
 	var input struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
@@ -110,24 +116,11 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_error", "title is required")
 		return
 	}
-	if input.CreatedBy <= 0 {
-		writeError(w, http.StatusBadRequest, "validation_error", "created_by must be a positive integer")
-		return
-	}
-	if err := ensureUserExists(input.CreatedBy); err != nil {
-		if errors.Is(err, errUserNotFound) {
-			writeError(w, http.StatusBadRequest, "invalid_created_by", "created_by user does not exist")
-			return
-		}
-		log.Printf("CreateTopic user lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "user_lookup_failed", "failed to verify user")
-		return
-	}
 
 	result, err := db().Exec(`
 		INSERT INTO topics (title, description, created_by)
 		VALUES (?, ?, ?)
-	`, input.Title, input.Description, input.CreatedBy)
+	`, input.Title, input.Description, user.ID)
 	if err != nil {
 		log.Printf("CreateTopic insert failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "topic_create_failed", "failed to create topic")
@@ -157,6 +150,13 @@ func CreateTopic(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateTopic(w http.ResponseWriter, r *http.Request) {
+	user, err := requireAuthenticatedUser(r)
+	if err != nil {
+		status, code, message := authError(err)
+		writeError(w, status, code, message)
+		return
+	}
+
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
@@ -179,8 +179,8 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := requireOwnership(r, existing.CreatedBy); err != nil {
-		status, code, message := actorError(err)
+	if err := authorizeOwnership(user, existing.CreatedBy); err != nil {
+		status, code, message := authError(err)
 		writeError(w, status, code, message)
 		return
 	}
@@ -218,6 +218,13 @@ func UpdateTopic(w http.ResponseWriter, r *http.Request) {
 }
 
 func DeleteTopic(w http.ResponseWriter, r *http.Request) {
+	user, err := requireAuthenticatedUser(r)
+	if err != nil {
+		status, code, message := authError(err)
+		writeError(w, status, code, message)
+		return
+	}
+
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
@@ -234,8 +241,8 @@ func DeleteTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := requireOwnership(r, ownerID); err != nil {
-		status, code, message := actorError(err)
+	if err := authorizeOwnership(user, ownerID); err != nil {
+		status, code, message := authError(err)
 		writeError(w, status, code, message)
 		return
 	}

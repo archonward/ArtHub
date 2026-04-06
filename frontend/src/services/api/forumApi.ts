@@ -6,9 +6,11 @@ import type {
   CreateTopicInput,
   DeleteResultDto,
   Post,
+  PostSort,
   PostDto,
   Topic,
   TopicDetails,
+  TopicPostsPageDto,
   TopicDto,
   UpdatePostInput,
   UpdateTopicInput,
@@ -16,7 +18,13 @@ import type {
   UserDto,
   VoteInput,
 } from "../../types";
-import { mapComment, mapPost, mapTopic, mapUser } from "../../types";
+import {
+  mapComment,
+  mapPagination,
+  mapPost,
+  mapTopic,
+  mapUser,
+} from "../../types";
 import { request } from "./client";
 
 export const forumApi = {
@@ -60,18 +68,37 @@ export const forumApi = {
     return mapTopic(topic);
   },
 
-  getTopicPosts: async (id: number): Promise<Post[]> => {
-    const posts = await request<PostDto[]>(`/topics/${id}/posts`);
-    return posts.map(mapPost);
+  getTopicPosts: async (
+    id: number,
+    sort: PostSort = "top",
+    page = 1,
+    pageSize = 10,
+  ): Promise<{ posts: Post[]; pagination: TopicDetails["pagination"] }> => {
+    const topicPostsPage = await request<TopicPostsPageDto>(
+      `/topics/${id}/posts?sort=${encodeURIComponent(sort)}&page=${page}&pageSize=${pageSize}`,
+    );
+    return {
+      posts: topicPostsPage.posts.map(mapPost),
+      pagination: mapPagination(topicPostsPage.pagination),
+    };
   },
 
-  getTopicDetails: async (id: number): Promise<TopicDetails> => {
-    const [topic, posts] = await Promise.all([
+  getTopicDetails: async (
+    id: number,
+    sort: PostSort = "top",
+    page = 1,
+    pageSize = 10,
+  ): Promise<TopicDetails> => {
+    const [topic, topicPostsPage] = await Promise.all([
       forumApi.getTopic(id),
-      forumApi.getTopicPosts(id),
+      forumApi.getTopicPosts(id, sort, page, pageSize),
     ]);
 
-    return { topic, posts };
+    return {
+      topic,
+      posts: topicPostsPage.posts,
+      pagination: topicPostsPage.pagination,
+    };
   },
 
   createTopic: async (input: CreateTopicInput): Promise<Topic> => {

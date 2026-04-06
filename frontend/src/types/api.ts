@@ -1,4 +1,4 @@
-import type { Comment, Post, Topic, User } from "./models";
+import type { Comment, Pagination, Post, Topic, User } from "./models";
 
 export interface ApiResponseEnvelope<T> {
   data: T;
@@ -41,6 +41,20 @@ export interface CommentDto {
   body: string;
   created_by: number;
   created_at: string;
+}
+
+export interface PaginationDto {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  has_prev: boolean;
+  has_next: boolean;
+}
+
+export interface TopicPostsPageDto {
+  posts: PostDto[];
+  pagination: PaginationDto;
 }
 
 export interface CreateTopicInput {
@@ -105,4 +119,13 @@ export const mapComment = (dto: CommentDto): Comment => ({
   body: dto.body,
   createdBy: dto.created_by,
   createdAt: dto.created_at,
+});
+
+export const mapPagination = (dto: PaginationDto): Pagination => ({
+  page: dto.page,
+  pageSize: dto.page_size,
+  totalItems: dto.total_items,
+  totalPages: dto.total_pages,
+  hasPrev: dto.has_prev,
+  hasNext: dto.has_next,
 });

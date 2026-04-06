@@ -2,12 +2,44 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 type nullableVote struct {
 	sql.NullInt64
+}
+
+type postSort string
+
+const (
+	postSortTop         postSort = "top"
+	postSortNew         postSort = "new"
+	defaultPostPageSize          = 10
+	maxPostPageSize              = 50
+)
+
+type paginationParams struct {
+	Page     int
+	PageSize int
+	Offset   int
+}
+
+type PaginationMetadata struct {
+	Page       int  `json:"page"`
+	PageSize   int  `json:"page_size"`
+	TotalItems int  `json:"total_items"`
+	TotalPages int  `json:"total_pages"`
+	HasPrev    bool `json:"has_prev"`
+	HasNext    bool `json:"has_next"`
+}
+
+type TopicPostsPage struct {
+	Posts      []Post             `json:"posts"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 func TopicPostsResource(w http.ResponseWriter, r *http.Request) {
@@ -63,64 +95,33 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUser := currentUserFromContext(r)
-	currentUserID := 0
-	if currentUser != nil {
-		currentUserID = currentUser.ID
+	sortMode, err := parsePostSort(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_sort", err.Error())
+		return
 	}
 
-	rows, err := db().Query(`
-		SELECT
-			p.id,
-			p.topic_id,
-			p.title,
-			p.body,
-			p.created_by,
-			p.created_at,
-			COALESCE(SUM(v.vote_value), 0) AS vote_score,
-			MAX(CASE WHEN v.user_id = ? THEN v.vote_value END) AS current_user_vote
-		FROM posts p
-		LEFT JOIN votes v ON v.post_id = p.id
-		WHERE p.topic_id = ?
-		GROUP BY p.id, p.topic_id, p.title, p.body, p.created_by, p.created_at
-		ORDER BY p.created_at ASC
-	`, currentUserID, topicID)
+	pagination, err := parsePaginationParams(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_pagination", err.Error())
+		return
+	}
+
+	posts, totalItems, err := loadPostsByTopic(topicID, currentUserFromContext(r), sortMode, pagination)
 	if err != nil {
 		log.Printf("GetPostsByTopic query failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "posts_query_failed", "failed to fetch posts")
 		return
 	}
-	defer rows.Close()
 
-	posts := make([]Post, 0)
-	for rows.Next() {
-		var post Post
-		var currentUserVote nullableVote
-		if err := rows.Scan(
-			&post.ID,
-			&post.TopicID,
-			&post.Title,
-			&post.Body,
-			&post.CreatedBy,
-			&post.CreatedAt,
-			&post.VoteScore,
-			&currentUserVote,
-		); err != nil {
-			log.Printf("GetPostsByTopic scan failed: %v", err)
-			writeError(w, http.StatusInternalServerError, "posts_parse_failed", "failed to parse posts")
-			return
-		}
-		post.CurrentUserVote = currentUserVote.pointer()
-		posts = append(posts, post)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Printf("GetPostsByTopic rows failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "posts_read_failed", "failed to read posts")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, posts)
+	writeJSON(w, http.StatusOK, TopicPostsPage{
+		Posts: posts,
+		Pagination: buildPaginationMetadata(
+			pagination.Page,
+			pagination.PageSize,
+			totalItems,
+		),
+	})
 }
 
 func GetPostByID(w http.ResponseWriter, r *http.Request) {
@@ -482,6 +483,137 @@ func loadPostByID(postID int, user *User) (Post, error) {
 
 	post.CurrentUserVote = currentUserVote.pointer()
 	return post, nil
+}
+
+func loadPostsByTopic(topicID int, user *User, sortMode postSort, pagination paginationParams) ([]Post, int, error) {
+	currentUserID := 0
+	if user != nil {
+		currentUserID = user.ID
+	}
+
+	var totalItems int
+	if err := db().QueryRow(`SELECT COUNT(*) FROM posts WHERE topic_id = ?`, topicID).Scan(&totalItems); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := db().Query(fmt.Sprintf(`
+		SELECT
+			p.id,
+			p.topic_id,
+			p.title,
+			p.body,
+			p.created_by,
+			p.created_at,
+			COALESCE(SUM(v.vote_value), 0) AS vote_score,
+			MAX(CASE WHEN v.user_id = ? THEN v.vote_value END) AS current_user_vote
+		FROM posts p
+		LEFT JOIN votes v ON v.post_id = p.id
+		WHERE p.topic_id = ?
+		GROUP BY p.id, p.topic_id, p.title, p.body, p.created_by, p.created_at
+		ORDER BY %s
+		LIMIT ? OFFSET ?
+	`, sortOrderClause(sortMode)), currentUserID, topicID, pagination.PageSize, pagination.Offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	posts := make([]Post, 0)
+	for rows.Next() {
+		var post Post
+		var currentUserVote nullableVote
+		if err := rows.Scan(
+			&post.ID,
+			&post.TopicID,
+			&post.Title,
+			&post.Body,
+			&post.CreatedBy,
+			&post.CreatedAt,
+			&post.VoteScore,
+			&currentUserVote,
+		); err != nil {
+			return nil, 0, err
+		}
+		post.CurrentUserVote = currentUserVote.pointer()
+		posts = append(posts, post)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	return posts, totalItems, nil
+}
+
+func parsePostSort(r *http.Request) (postSort, error) {
+	rawSort := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("sort")))
+	if rawSort == "" {
+		return postSortTop, nil
+	}
+
+	switch postSort(rawSort) {
+	case postSortTop, postSortNew:
+		return postSort(rawSort), nil
+	default:
+		return "", fmt.Errorf("sort must be one of: top, new")
+	}
+}
+
+func sortOrderClause(sortMode postSort) string {
+	switch sortMode {
+	case postSortNew:
+		return "p.created_at DESC, p.id DESC"
+	case postSortTop:
+		fallthrough
+	default:
+		return "vote_score DESC, p.created_at DESC, p.id DESC"
+	}
+}
+
+func parsePaginationParams(r *http.Request) (paginationParams, error) {
+	page := 1
+	pageSize := defaultPostPageSize
+
+	if rawPage := strings.TrimSpace(r.URL.Query().Get("page")); rawPage != "" {
+		parsedPage, err := strconv.Atoi(rawPage)
+		if err != nil || parsedPage <= 0 {
+			return paginationParams{}, fmt.Errorf("page must be a positive integer")
+		}
+		page = parsedPage
+	}
+
+	if rawPageSize := strings.TrimSpace(r.URL.Query().Get("pageSize")); rawPageSize != "" {
+		parsedPageSize, err := strconv.Atoi(rawPageSize)
+		if err != nil || parsedPageSize <= 0 {
+			return paginationParams{}, fmt.Errorf("pageSize must be a positive integer")
+		}
+		if parsedPageSize > maxPostPageSize {
+			return paginationParams{}, fmt.Errorf("pageSize must be %d or fewer", maxPostPageSize)
+		}
+		pageSize = parsedPageSize
+	}
+
+	return paginationParams{
+		Page:     page,
+		PageSize: pageSize,
+		Offset:   (page - 1) * pageSize,
+	}, nil
+}
+
+func buildPaginationMetadata(page, pageSize, totalItems int) PaginationMetadata {
+	totalPages := 0
+	if totalItems > 0 {
+		totalPages = (totalItems + pageSize - 1) / pageSize
+	}
+
+	return PaginationMetadata{
+		Page:       page,
+		PageSize:   pageSize,
+		TotalItems: totalItems,
+		TotalPages: totalPages,
+		HasPrev:    page > 1 && totalPages > 0,
+		HasNext:    page < totalPages,
+	}
 }
 
 func (vote nullableVote) pointer() *int {

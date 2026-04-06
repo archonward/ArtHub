@@ -6,6 +6,10 @@ import (
 	"net/http"
 )
 
+type nullableVote struct {
+	sql.NullInt64
+}
+
 func TopicPostsResource(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -30,6 +34,17 @@ func PostResource(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func PostVoteResource(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		VoteOnPost(w, r)
+	case http.MethodDelete:
+		DeletePostVote(w, r)
+	default:
+		writeMethodNotAllowed(w, http.MethodPost, http.MethodDelete)
+	}
+}
+
 func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 	topicID, err := parsePathID(r, "id")
 	if err != nil {
@@ -48,12 +63,28 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	currentUser := currentUserFromContext(r)
+	currentUserID := 0
+	if currentUser != nil {
+		currentUserID = currentUser.ID
+	}
+
 	rows, err := db().Query(`
-		SELECT id, topic_id, title, body, created_by, created_at
-		FROM posts
-		WHERE topic_id = ?
-		ORDER BY created_at ASC
-	`, topicID)
+		SELECT
+			p.id,
+			p.topic_id,
+			p.title,
+			p.body,
+			p.created_by,
+			p.created_at,
+			COALESCE(SUM(v.vote_value), 0) AS vote_score,
+			MAX(CASE WHEN v.user_id = ? THEN v.vote_value END) AS current_user_vote
+		FROM posts p
+		LEFT JOIN votes v ON v.post_id = p.id
+		WHERE p.topic_id = ?
+		GROUP BY p.id, p.topic_id, p.title, p.body, p.created_by, p.created_at
+		ORDER BY p.created_at ASC
+	`, currentUserID, topicID)
 	if err != nil {
 		log.Printf("GetPostsByTopic query failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "posts_query_failed", "failed to fetch posts")
@@ -64,11 +95,22 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 	posts := make([]Post, 0)
 	for rows.Next() {
 		var post Post
-		if err := rows.Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt); err != nil {
+		var currentUserVote nullableVote
+		if err := rows.Scan(
+			&post.ID,
+			&post.TopicID,
+			&post.Title,
+			&post.Body,
+			&post.CreatedBy,
+			&post.CreatedAt,
+			&post.VoteScore,
+			&currentUserVote,
+		); err != nil {
 			log.Printf("GetPostsByTopic scan failed: %v", err)
 			writeError(w, http.StatusInternalServerError, "posts_parse_failed", "failed to parse posts")
 			return
 		}
+		post.CurrentUserVote = currentUserVote.pointer()
 		posts = append(posts, post)
 	}
 
@@ -88,12 +130,7 @@ func GetPostByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var post Post
-	err = db().QueryRow(`
-		SELECT id, topic_id, title, body, created_by, created_at
-		FROM posts
-		WHERE id = ?
-	`, postID).Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
+	post, err := loadPostByID(postID, currentUserFromContext(r))
 	if err == sql.ErrNoRows {
 		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
@@ -170,12 +207,7 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var post Post
-	err = db().QueryRow(`
-		SELECT id, topic_id, title, body, created_by, created_at
-		FROM posts
-		WHERE id = ?
-	`, id).Scan(&post.ID, &post.TopicID, &post.Title, &post.Body, &post.CreatedBy, &post.CreatedAt)
+	post, err := loadPostByID(int(id), user)
 	if err != nil {
 		log.Printf("CreatePost reload failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to retrieve post")
@@ -199,12 +231,7 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var existing Post
-	err = db().QueryRow(`
-		SELECT id, topic_id, title, body, created_by, created_at
-		FROM posts
-		WHERE id = ?
-	`, postID).Scan(&existing.ID, &existing.TopicID, &existing.Title, &existing.Body, &existing.CreatedBy, &existing.CreatedAt)
+	existing, err := loadPostByID(postID, user)
 	if err == sql.ErrNoRows {
 		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
 		return
@@ -248,9 +275,14 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing.Title = input.Title
-	existing.Body = input.Body
-	writeJSON(w, http.StatusOK, existing)
+	updated, err := loadPostByID(postID, user)
+	if err != nil {
+		log.Printf("UpdatePost reload failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to retrieve post")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func DeletePost(w http.ResponseWriter, r *http.Request) {
@@ -309,4 +341,154 @@ func DeletePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeNoContent(w)
+}
+
+func VoteOnPost(w http.ResponseWriter, r *http.Request) {
+	user, err := requireAuthenticatedUser(r)
+	if err != nil {
+		status, code, message := authError(err)
+		writeError(w, status, code, message)
+		return
+	}
+
+	postID, err := parsePathID(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
+		return
+	}
+
+	var input struct {
+		Value int `json:"value"`
+	}
+	if err := decodeJSON(r, &input); err != nil {
+		code, message := malformedJSONError(err)
+		writeError(w, http.StatusBadRequest, code, message)
+		return
+	}
+
+	if input.Value != -1 && input.Value != 1 {
+		writeError(w, http.StatusBadRequest, "validation_error", "value must be 1 or -1")
+		return
+	}
+
+	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID)
+	if err != nil {
+		log.Printf("VoteOnPost post lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to verify post")
+		return
+	}
+	if !exists {
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
+		return
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO votes (user_id, post_id, vote_value)
+		VALUES (?, ?, ?)
+		ON CONFLICT(user_id, post_id)
+		DO UPDATE SET vote_value = excluded.vote_value, updated_at = CURRENT_TIMESTAMP
+	`, user.ID, postID, input.Value); err != nil {
+		log.Printf("VoteOnPost upsert failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "vote_save_failed", "failed to save vote")
+		return
+	}
+
+	post, err := loadPostByID(postID, user)
+	if err != nil {
+		log.Printf("VoteOnPost reload failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to retrieve post")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, post)
+}
+
+func DeletePostVote(w http.ResponseWriter, r *http.Request) {
+	user, err := requireAuthenticatedUser(r)
+	if err != nil {
+		status, code, message := authError(err)
+		writeError(w, status, code, message)
+		return
+	}
+
+	postID, err := parsePathID(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
+		return
+	}
+
+	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID)
+	if err != nil {
+		log.Printf("DeletePostVote post lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to verify post")
+		return
+	}
+	if !exists {
+		writeError(w, http.StatusNotFound, "post_not_found", "post not found")
+		return
+	}
+
+	if _, err := db().Exec(`DELETE FROM votes WHERE user_id = ? AND post_id = ?`, user.ID, postID); err != nil {
+		log.Printf("DeletePostVote failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "vote_delete_failed", "failed to remove vote")
+		return
+	}
+
+	post, err := loadPostByID(postID, user)
+	if err != nil {
+		log.Printf("DeletePostVote reload failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "post_query_failed", "failed to retrieve post")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, post)
+}
+
+func loadPostByID(postID int, user *User) (Post, error) {
+	currentUserID := 0
+	if user != nil {
+		currentUserID = user.ID
+	}
+
+	var post Post
+	var currentUserVote nullableVote
+	err := db().QueryRow(`
+		SELECT
+			p.id,
+			p.topic_id,
+			p.title,
+			p.body,
+			p.created_by,
+			p.created_at,
+			COALESCE(SUM(v.vote_value), 0) AS vote_score,
+			MAX(CASE WHEN v.user_id = ? THEN v.vote_value END) AS current_user_vote
+		FROM posts p
+		LEFT JOIN votes v ON v.post_id = p.id
+		WHERE p.id = ?
+		GROUP BY p.id, p.topic_id, p.title, p.body, p.created_by, p.created_at
+	`, currentUserID, postID).Scan(
+		&post.ID,
+		&post.TopicID,
+		&post.Title,
+		&post.Body,
+		&post.CreatedBy,
+		&post.CreatedAt,
+		&post.VoteScore,
+		&currentUserVote,
+	)
+	if err != nil {
+		return Post{}, err
+	}
+
+	post.CurrentUserVote = currentUserVote.pointer()
+	return post, nil
+}
+
+func (vote nullableVote) pointer() *int {
+	if !vote.Valid {
+		return nil
+	}
+
+	value := int(vote.Int64)
+	return &value
 }

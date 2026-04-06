@@ -179,6 +179,13 @@ textarea {
   margin: 0 0 8px;
 }
 
+.list-item__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
 .content-body {
   white-space: pre-wrap;
   margin: 0 0 12px;
@@ -195,12 +202,71 @@ textarea {
   margin: 24px 0;
 }
 
+.vote-controls {
+  display: inline-grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.vote-controls--compact {
+  margin-bottom: 0;
+}
+
+.vote-controls__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vote-button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.vote-button:disabled {
+  cursor: not-allowed;
+}
+
+.vote-button--active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #edf4ff;
+}
+
+.vote-button--down.vote-button--active {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: #fff1f0;
+}
+
+.vote-score {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.vote-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 640px) {
   .card {
     padding: 20px;
   }
 
   .page-header {
+    flex-direction: column;
+  }
+
+  .list-item__header {
     flex-direction: column;
   }
 }

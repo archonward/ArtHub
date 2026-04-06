@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
+import PostVoteControls from "../components/PostVoteControls";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
 import type { Post, Topic } from "../types";
@@ -14,6 +15,14 @@ const TopicDetailPage: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handlePostChange = (updatedPost: Post) => {
+    setPosts((currentPosts) =>
+      currentPosts.map((post) =>
+        post.id === updatedPost.id ? updatedPost : post,
+      ),
+    );
+  };
 
   useEffect(() => {
     const topicId = Number(id);
@@ -60,7 +69,10 @@ const TopicDetailPage: React.FC = () => {
       subtitle={topic.description || "No description provided."}
       actions={
         <div className="action-row">
-          <button className="button button--secondary" onClick={() => navigate("/topics")}>
+          <button
+            className="button button--secondary"
+            onClick={() => navigate("/topics")}
+          >
             Back to Topics
           </button>
           {isAuthenticated ? (
@@ -83,20 +95,25 @@ const TopicDetailPage: React.FC = () => {
       }
     >
       {!isAuthenticated ? (
-        <Notice tone="info">Log in if you want to create a post in this topic.</Notice>
+        <Notice tone="info">
+          Log in if you want to create a post in this topic.
+        </Notice>
       ) : null}
       {currentUser && currentUser.id !== topic.createdBy ? (
         <Notice tone="info">Only the topic owner can edit this topic.</Notice>
       ) : null}
       <p className="meta">
-        Created by user {topic.createdBy} on {new Date(topic.createdAt).toLocaleString()}
+        Created by user {topic.createdBy} on{" "}
+        {new Date(topic.createdAt).toLocaleString()}
       </p>
 
       <div className="stack">
         <h2 className="section-title">Posts ({posts.length})</h2>
 
         {posts.length === 0 ? (
-          <p className="empty-state">No posts yet. Create the first post in this topic.</p>
+          <p className="empty-state">
+            No posts yet. Create the first post in this topic.
+          </p>
         ) : (
           <ul className="list">
             {posts.map((post) => (
@@ -105,7 +122,14 @@ const TopicDetailPage: React.FC = () => {
                 className="list-item list-item--interactive"
                 onClick={() => navigate(`/posts/${post.id}`)}
               >
-                <h3>{post.title}</h3>
+                <div className="list-item__header">
+                  <h3>{post.title}</h3>
+                  <PostVoteControls
+                    post={post}
+                    onPostChange={handlePostChange}
+                    compact
+                  />
+                </div>
                 <p className="content-body">{post.body}</p>
                 <p className="meta">
                   Created by user {post.createdBy} on{" "}

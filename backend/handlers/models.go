@@ -17,12 +17,14 @@ type Topic struct {
 }
 
 type Post struct {
-	ID        int       `json:"id"`
-	TopicID   int       `json:"topic_id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	CreatedBy int       `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
+	ID              int       `json:"id"`
+	TopicID         int       `json:"topic_id"`
+	Title           string    `json:"title"`
+	Body            string    `json:"body"`
+	CreatedBy       int       `json:"created_by"`
+	CreatedAt       time.Time `json:"created_at"`
+	VoteScore       int       `json:"vote_score"`
+	CurrentUserVote *int      `json:"current_user_vote"`
 }
 
 type Comment struct {

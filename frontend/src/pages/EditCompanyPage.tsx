@@ -5,13 +5,14 @@ import PageLayout from "../components/PageLayout";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
 
-const EditTopicPage: React.FC = () => {
+const EditCompanyPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const topicId = Number(id);
+  const companyId = Number(id);
 
-  const [title, setTitle] = useState("");
+  const [ticker, setTicker] = useState("");
+  const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -19,67 +20,79 @@ const EditTopicPage: React.FC = () => {
   const [ownerId, setOwnerId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!topicId) {
-      setError("Invalid topic ID.");
+    if (!companyId) {
+      setError("Invalid company ID.");
       setLoading(false);
       return;
     }
 
-    const fetchTopic = async () => {
+    const fetchCompany = async () => {
       try {
-        const topic = await forumApi.getTopic(topicId);
-        setTitle(topic.title);
-        setDescription(topic.description);
-        setOwnerId(topic.createdBy);
+        const company = await forumApi.getCompany(companyId);
+        setTicker(company.ticker);
+        setName(company.name);
+        setDescription(company.description);
+        setOwnerId(company.createdBy);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load topic.");
+        setError(err instanceof Error ? err.message : "Failed to load company.");
       } finally {
         setLoading(false);
       }
     };
 
-    void fetchTopic();
-  }, [topicId]);
+    void fetchCompany();
+  }, [companyId]);
 
   const isOwner = ownerId !== null && currentUser?.id === ownerId;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!topicId || !title.trim()) {
-      setError("Title is required.");
+    if (!companyId || !ticker.trim() || !name.trim()) {
+      setError("Ticker and company name are required.");
       return;
     }
 
     setSubmitting(true);
     try {
-      await forumApi.updateTopic(topicId, {
-        title: title.trim(),
+      await forumApi.updateCompany(companyId, {
+        ticker: ticker.trim().toUpperCase(),
+        name: name.trim(),
         description: description.trim(),
       });
-      navigate(`/topics/${topicId}`);
+      navigate(`/companies/${companyId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update topic.");
+      setError(err instanceof Error ? err.message : "Failed to update company.");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <PageLayout title="Edit Topic" subtitle="Update the topic title or description.">
+    <PageLayout title="Edit Company" subtitle="Update the ticker, name, or summary.">
       {error ? <Notice tone="error">{error}</Notice> : null}
       {ownerId !== null && !isOwner ? (
-        <Notice tone="error">You cannot edit a topic you do not own.</Notice>
+        <Notice tone="error">You cannot edit a company you do not own.</Notice>
       ) : null}
       {loading ? (
-        <p className="empty-state">Loading topic...</p>
+        <p className="empty-state">Loading company...</p>
       ) : (
         <form className="form-grid" onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="title">Title</label>
+            <label htmlFor="ticker">Ticker</label>
             <input
-              id="title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              id="ticker"
+              value={ticker}
+              onChange={(event) => setTicker(event.target.value.toUpperCase())}
+              disabled={submitting || !isOwner}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="name">Company Name</label>
+            <input
+              id="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
               disabled={submitting || !isOwner}
             />
           </div>
@@ -114,4 +127,4 @@ const EditTopicPage: React.FC = () => {
   );
 };
 
-export default EditTopicPage;
+export default EditCompanyPage;

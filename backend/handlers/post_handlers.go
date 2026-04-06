@@ -37,15 +37,15 @@ type PaginationMetadata struct {
 	HasNext    bool `json:"has_next"`
 }
 
-type TopicPostsPage struct {
+type CompanyPostsPage struct {
 	Posts      []Post             `json:"posts"`
 	Pagination PaginationMetadata `json:"pagination"`
 }
 
-func TopicPostsResource(w http.ResponseWriter, r *http.Request) {
+func CompanyPostsResource(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		GetPostsByTopic(w, r)
+		GetPostsByCompany(w, r)
 	case http.MethodPost:
 		CreatePost(w, r)
 	default:
@@ -77,21 +77,21 @@ func PostVoteResource(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
-	topicID, err := parsePathID(r, "id")
+func GetPostsByCompany(w http.ResponseWriter, r *http.Request) {
+	companyID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
+		writeError(w, http.StatusBadRequest, "invalid_company_id", "company id must be a positive integer")
 		return
 	}
 
-	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID)
+	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM companies WHERE id = ?)", companyID)
 	if err != nil {
-		log.Printf("GetPostsByTopic topic lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to verify topic")
+		log.Printf("GetPostsByCompany company lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "company_query_failed", "failed to verify company")
 		return
 	}
 	if !exists {
-		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
+		writeError(w, http.StatusNotFound, "company_not_found", "company not found")
 		return
 	}
 
@@ -107,14 +107,14 @@ func GetPostsByTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posts, totalItems, err := loadPostsByTopic(topicID, currentUserFromContext(r), sortMode, pagination)
+	posts, totalItems, err := loadPostsByCompany(companyID, currentUserFromContext(r), sortMode, pagination)
 	if err != nil {
-		log.Printf("GetPostsByTopic query failed: %v", err)
+		log.Printf("GetPostsByCompany query failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "posts_query_failed", "failed to fetch posts")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, TopicPostsPage{
+	writeJSON(w, http.StatusOK, CompanyPostsPage{
 		Posts: posts,
 		Pagination: buildPaginationMetadata(
 			pagination.Page,
@@ -153,20 +153,20 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	topicID, err := parsePathID(r, "id")
+	companyID, err := parsePathID(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_topic_id", "topic id must be a positive integer")
+		writeError(w, http.StatusBadRequest, "invalid_company_id", "company id must be a positive integer")
 		return
 	}
 
-	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM topics WHERE id = ?)", topicID)
+	exists, err := resourceExists("SELECT EXISTS(SELECT 1 FROM companies WHERE id = ?)", companyID)
 	if err != nil {
-		log.Printf("CreatePost topic lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "topic_query_failed", "failed to verify topic")
+		log.Printf("CreatePost company lookup failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "company_query_failed", "failed to verify company")
 		return
 	}
 	if !exists {
-		writeError(w, http.StatusNotFound, "topic_not_found", "topic not found")
+		writeError(w, http.StatusNotFound, "company_not_found", "company not found")
 		return
 	}
 
@@ -193,9 +193,9 @@ func CreatePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (?, ?, ?, ?)
-	`, topicID, input.Title, input.Body, user.ID)
+	`, companyID, input.Title, input.Body, user.ID)
 	if err != nil {
 		log.Printf("CreatePost insert failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "post_create_failed", "failed to create post")
@@ -268,7 +268,7 @@ func UpdatePost(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := db().Exec(`
 		UPDATE posts
-		SET title = ?, body = ?
+		SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`, input.Title, input.Body, postID); err != nil {
 		log.Printf("UpdatePost update failed: %v", err)
@@ -456,24 +456,26 @@ func loadPostByID(postID int, user *User) (Post, error) {
 	err := db().QueryRow(`
 		SELECT
 			p.id,
-			p.topic_id,
+			p.company_id,
 			p.title,
-			p.body,
+			p.content AS body,
 			p.created_by,
 			p.created_at,
+			p.updated_at,
 			COALESCE(SUM(v.vote_value), 0) AS vote_score,
 			MAX(CASE WHEN v.user_id = ? THEN v.vote_value END) AS current_user_vote
 		FROM posts p
 		LEFT JOIN votes v ON v.post_id = p.id
 		WHERE p.id = ?
-		GROUP BY p.id, p.topic_id, p.title, p.body, p.created_by, p.created_at
+		GROUP BY p.id, p.company_id, p.title, p.content, p.created_by, p.created_at, p.updated_at
 	`, currentUserID, postID).Scan(
 		&post.ID,
-		&post.TopicID,
+		&post.CompanyID,
 		&post.Title,
 		&post.Body,
 		&post.CreatedBy,
 		&post.CreatedAt,
+		&post.UpdatedAt,
 		&post.VoteScore,
 		&currentUserVote,
 	)
@@ -485,34 +487,35 @@ func loadPostByID(postID int, user *User) (Post, error) {
 	return post, nil
 }
 
-func loadPostsByTopic(topicID int, user *User, sortMode postSort, pagination paginationParams) ([]Post, int, error) {
+func loadPostsByCompany(companyID int, user *User, sortMode postSort, pagination paginationParams) ([]Post, int, error) {
 	currentUserID := 0
 	if user != nil {
 		currentUserID = user.ID
 	}
 
 	var totalItems int
-	if err := db().QueryRow(`SELECT COUNT(*) FROM posts WHERE topic_id = ?`, topicID).Scan(&totalItems); err != nil {
+	if err := db().QueryRow(`SELECT COUNT(*) FROM posts WHERE company_id = ?`, companyID).Scan(&totalItems); err != nil {
 		return nil, 0, err
 	}
 
 	rows, err := db().Query(fmt.Sprintf(`
 		SELECT
 			p.id,
-			p.topic_id,
+			p.company_id,
 			p.title,
-			p.body,
+			p.content AS body,
 			p.created_by,
 			p.created_at,
+			p.updated_at,
 			COALESCE(SUM(v.vote_value), 0) AS vote_score,
 			MAX(CASE WHEN v.user_id = ? THEN v.vote_value END) AS current_user_vote
 		FROM posts p
 		LEFT JOIN votes v ON v.post_id = p.id
-		WHERE p.topic_id = ?
-		GROUP BY p.id, p.topic_id, p.title, p.body, p.created_by, p.created_at
+		WHERE p.company_id = ?
+		GROUP BY p.id, p.company_id, p.title, p.content, p.created_by, p.created_at, p.updated_at
 		ORDER BY %s
 		LIMIT ? OFFSET ?
-	`, sortOrderClause(sortMode)), currentUserID, topicID, pagination.PageSize, pagination.Offset)
+	`, sortOrderClause(sortMode)), currentUserID, companyID, pagination.PageSize, pagination.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -524,11 +527,12 @@ func loadPostsByTopic(topicID int, user *User, sortMode postSort, pagination pag
 		var currentUserVote nullableVote
 		if err := rows.Scan(
 			&post.ID,
-			&post.TopicID,
+			&post.CompanyID,
 			&post.Title,
 			&post.Body,
 			&post.CreatedBy,
 			&post.CreatedAt,
+			&post.UpdatedAt,
 			&post.VoteScore,
 			&currentUserVote,
 		); err != nil {

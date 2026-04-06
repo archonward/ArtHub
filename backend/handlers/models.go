@@ -8,21 +8,24 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type Topic struct {
+type Company struct {
 	ID          int       `json:"id"`
-	Title       string    `json:"title"`
+	Ticker      string    `json:"ticker"`
+	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	CreatedBy   int       `json:"created_by"`
 	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type Post struct {
 	ID              int       `json:"id"`
-	TopicID         int       `json:"topic_id"`
+	CompanyID       int       `json:"company_id"`
 	Title           string    `json:"title"`
 	Body            string    `json:"body"`
 	CreatedBy       int       `json:"created_by"`
 	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 	VoteScore       int       `json:"vote_score"`
 	CurrentUserVote *int      `json:"current_user_vote"`
 }
@@ -33,4 +36,5 @@ type Comment struct {
 	Body      string    `json:"body"`
 	CreatedBy int       `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

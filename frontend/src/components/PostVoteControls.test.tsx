@@ -22,7 +22,7 @@ const mockedForumApi = forumApi as jest.Mocked<typeof forumApi>;
 
 const basePost: Post = {
   id: 4,
-  topicId: 2,
+  companyId: 2,
   title: "Studio critique",
   body: "Need feedback",
   createdBy: 8,

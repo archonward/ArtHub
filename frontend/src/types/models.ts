@@ -3,9 +3,10 @@ export interface User {
   username: string;
 }
 
-export interface Topic {
+export interface Company {
   id: number;
-  title: string;
+  ticker: string;
+  name: string;
   description: string;
   createdBy: number;
   createdAt: string;
@@ -13,7 +14,7 @@ export interface Topic {
 
 export interface Post {
   id: number;
-  topicId: number;
+  companyId: number;
   title: string;
   body: string;
   createdBy: number;
@@ -30,8 +31,8 @@ export interface Comment {
   createdAt: string;
 }
 
-export interface TopicDetails {
-  topic: Topic;
+export interface CompanyDetails {
+  company: Company;
   posts: Post[];
   pagination: Pagination;
 }

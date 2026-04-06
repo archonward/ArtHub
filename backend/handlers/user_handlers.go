@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 )
 
 func Signup(w http.ResponseWriter, r *http.Request) {
@@ -40,52 +41,28 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var existingUserID int
-	var existingPasswordHash sql.NullString
-	err = db().QueryRow(`
-		SELECT id, password_hash
-		FROM users
-		WHERE username = ?
-	`, username).Scan(&existingUserID, &existingPasswordHash)
+	result, err := db().Exec(`
+		INSERT INTO users (username, password_hash)
+		VALUES (?, ?)
+	`, username, passwordHash)
 	switch {
-	case err == sql.ErrNoRows:
-		result, insertErr := db().Exec(`
-			INSERT INTO users (username, password_hash)
-			VALUES (?, ?)
-		`, username, passwordHash)
-		if insertErr != nil {
-			log.Printf("Signup insert failed: %v", insertErr)
-			writeError(w, http.StatusInternalServerError, "user_create_failed", "failed to create user")
-			return
-		}
-		lastID, insertErr := result.LastInsertId()
-		if insertErr != nil {
-			writeError(w, http.StatusInternalServerError, "user_create_failed", "failed to retrieve user")
-			return
-		}
-		existingUserID = int(lastID)
-	case err != nil:
-		log.Printf("Signup lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "signup_failed", "failed to create account")
+	case err == nil:
+	case strings.Contains(strings.ToLower(err.Error()), "unique"):
+		writeError(w, http.StatusConflict, "username_taken", "username is already registered")
 		return
 	default:
-		if existingPasswordHash.Valid && trimRequired(existingPasswordHash.String) != "" {
-			writeError(w, http.StatusConflict, "username_taken", "username is already registered")
-			return
-		}
-
-		if _, updateErr := db().Exec(`
-			UPDATE users
-			SET password_hash = ?
-			WHERE id = ?
-		`, passwordHash, existingUserID); updateErr != nil {
-			log.Printf("Signup legacy-user upgrade failed: %v", updateErr)
-			writeError(w, http.StatusInternalServerError, "signup_failed", "failed to activate account")
-			return
-		}
+		log.Printf("Signup insert failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "signup_failed", "failed to create account")
+		return
 	}
 
-	token, session, err := createSession(existingUserID)
+	userID, err := result.LastInsertId()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "user_create_failed", "failed to retrieve user")
+		return
+	}
+
+	token, session, err := createSession(int(userID))
 	if err != nil {
 		log.Printf("Signup session creation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "session_create_failed", "failed to create session")
@@ -93,7 +70,7 @@ func Signup(w http.ResponseWriter, r *http.Request) {
 	}
 	setSessionCookie(w, token, session.ExpiresAt)
 
-	user, err := getUserByID(existingUserID)
+	user, err := getUserByID(int(userID))
 	if err != nil || user == nil {
 		writeError(w, http.StatusInternalServerError, "user_query_failed", "failed to load current user")
 		return
@@ -131,7 +108,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var userID int
-	var passwordHash sql.NullString
+	var passwordHash string
 	err := db().QueryRow(`
 		SELECT id, password_hash
 		FROM users
@@ -147,12 +124,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !passwordHash.Valid || trimRequired(passwordHash.String) == "" {
-		writeError(w, http.StatusUnauthorized, "password_not_set", "account exists but does not have a password yet")
-		return
-	}
-
-	if err := comparePassword(passwordHash.String, password); err != nil {
+	if err := comparePassword(passwordHash, password); err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid username or password")
 		return
 	}

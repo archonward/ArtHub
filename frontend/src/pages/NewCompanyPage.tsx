@@ -4,9 +4,9 @@ import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
 import { forumApi } from "../services/api/forumApi";
 
-export default function NewTopicPage() {
+export default function NewCompanyPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ title: "", description: "" });
+  const [form, setForm] = useState({ ticker: "", name: "", description: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -14,38 +14,57 @@ export default function NewTopicPage() {
     event.preventDefault();
     setError("");
 
-    if (!form.title.trim()) {
-      setError("Title is required.");
+    if (!form.ticker.trim()) {
+      setError("Ticker is required.");
+      return;
+    }
+
+    if (!form.name.trim()) {
+      setError("Company name is required.");
       return;
     }
 
     setLoading(true);
     try {
-      const topic = await forumApi.createTopic({
-        title: form.title.trim(),
+      const company = await forumApi.createCompany({
+        ticker: form.ticker.trim().toUpperCase(),
+        name: form.name.trim(),
         description: form.description.trim(),
       });
-      navigate(`/topics/${topic.id}`);
+      navigate(`/companies/${company.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create topic.");
+      setError(err instanceof Error ? err.message : "Failed to create company.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <PageLayout title="Create Topic" subtitle="Set up a discussion area for related posts.">
+    <PageLayout title="Add Company" subtitle="Create a company page anchored to a ticker.">
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <form className="form-grid" onSubmit={handleSubmit}>
         <div className="field">
-          <label htmlFor="title">Title</label>
+          <label htmlFor="ticker">Ticker</label>
           <input
-            id="title"
-            name="title"
-            value={form.title}
+            id="ticker"
+            name="ticker"
+            value={form.ticker}
             onChange={(event) =>
-              setForm((current) => ({ ...current, title: event.target.value }))
+              setForm((current) => ({ ...current, ticker: event.target.value.toUpperCase() }))
+            }
+            disabled={loading}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="name">Company Name</label>
+          <input
+            id="name"
+            name="name"
+            value={form.name}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, name: event.target.value }))
             }
             disabled={loading}
           />
@@ -67,12 +86,12 @@ export default function NewTopicPage() {
 
         <div className="form-actions">
           <button className="button button--primary" type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Create Topic"}
+            {loading ? "Creating..." : "Create Company"}
           </button>
           <button
             className="button button--secondary"
             type="button"
-            onClick={() => navigate("/topics")}
+            onClick={() => navigate("/companies")}
             disabled={loading}
           >
             Cancel

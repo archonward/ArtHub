@@ -1,4 +1,4 @@
-import type { Comment, Pagination, Post, Topic, User } from "./models";
+import type { Comment, Company, Pagination, Post, User } from "./models";
 
 export interface ApiResponseEnvelope<T> {
   data: T;
@@ -16,9 +16,10 @@ export interface UserDto {
   username: string;
 }
 
-export interface TopicDto {
+export interface CompanyDto {
   id: number;
-  title: string;
+  ticker: string;
+  name: string;
   description: string;
   created_by: number;
   created_at: string;
@@ -26,7 +27,7 @@ export interface TopicDto {
 
 export interface PostDto {
   id: number;
-  topic_id: number;
+  company_id: number;
   title: string;
   body: string;
   created_by: number;
@@ -52,18 +53,20 @@ export interface PaginationDto {
   has_next: boolean;
 }
 
-export interface TopicPostsPageDto {
+export interface CompanyPostsPageDto {
   posts: PostDto[];
   pagination: PaginationDto;
 }
 
-export interface CreateTopicInput {
-  title: string;
+export interface CreateCompanyInput {
+  ticker: string;
+  name: string;
   description: string;
 }
 
-export interface UpdateTopicInput {
-  title: string;
+export interface UpdateCompanyInput {
+  ticker: string;
+  name: string;
   description: string;
 }
 
@@ -94,9 +97,10 @@ export const mapUser = (dto: UserDto): User => ({
   username: dto.username,
 });
 
-export const mapTopic = (dto: TopicDto): Topic => ({
+export const mapCompany = (dto: CompanyDto): Company => ({
   id: dto.id,
-  title: dto.title,
+  ticker: dto.ticker,
+  name: dto.name,
   description: dto.description || "",
   createdBy: dto.created_by,
   createdAt: dto.created_at,
@@ -104,7 +108,7 @@ export const mapTopic = (dto: TopicDto): Topic => ({
 
 export const mapPost = (dto: PostDto): Post => ({
   id: dto.id,
-  topicId: dto.topic_id,
+  companyId: dto.company_id,
   title: dto.title,
   body: dto.body,
   createdBy: dto.created_by,

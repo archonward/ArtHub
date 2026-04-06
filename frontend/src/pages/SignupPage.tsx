@@ -22,7 +22,7 @@ const SignupPage: React.FC = () => {
 
   useEffect(() => {
     if (!isBootstrapping && isAuthenticated) {
-      navigate("/topics", { replace: true });
+      navigate("/companies", { replace: true });
     }
   }, [isAuthenticated, isBootstrapping, navigate]);
 
@@ -51,7 +51,7 @@ const SignupPage: React.FC = () => {
 
     try {
       await signup(username.trim(), password);
-      const redirectTo = (location.state as SignupLocationState | null)?.from?.pathname || "/topics";
+      const redirectTo = (location.state as SignupLocationState | null)?.from?.pathname || "/companies";
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to sign up.");
@@ -63,7 +63,7 @@ const SignupPage: React.FC = () => {
   return (
     <PageLayout
       title="Create ArtHub Account"
-      subtitle="Set up an account to create topics, posts, and comments."
+      subtitle="Set up an account to create companies, posts, and comments."
       narrow
     >
       {error ? <Notice tone="error">{error}</Notice> : null}

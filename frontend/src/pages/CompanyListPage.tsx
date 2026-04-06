@@ -4,46 +4,46 @@ import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
-import type { Topic } from "../types";
+import type { Company } from "../types";
 
-const TopicListPage: React.FC = () => {
+const CompanyListPage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, isAuthenticated, logout, isBootstrapping } = useAuth();
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [deletingTopicId, setDeletingTopicId] = useState<number | null>(null);
+  const [deletingCompanyId, setDeletingCompanyId] = useState<number | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    const fetchTopics = async () => {
+    const fetchCompanies = async () => {
       try {
-        setTopics(await forumApi.getTopics());
+        setCompanies(await forumApi.getCompanies());
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load topics.");
+        setError(err instanceof Error ? err.message : "Failed to load companies.");
       } finally {
         setLoading(false);
       }
     };
 
-    void fetchTopics();
+    void fetchCompanies();
   }, []);
 
-  const handleDelete = async (topicId: number) => {
-    if (!window.confirm("Delete this topic? This also removes its posts and comments.")) {
+  const handleDelete = async (companyId: number) => {
+    if (!window.confirm("Delete this company? This also removes its posts and comments.")) {
       return;
     }
 
     try {
       setActionError(null);
-      setDeletingTopicId(topicId);
-      await forumApi.deleteTopic(topicId);
-      setTopics((current) => current.filter((topic) => topic.id !== topicId));
+      setDeletingCompanyId(companyId);
+      await forumApi.deleteCompany(companyId);
+      setCompanies((current) => current.filter((company) => company.id !== companyId));
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete topic.");
+      setActionError(err instanceof Error ? err.message : "Failed to delete company.");
     } finally {
-      setDeletingTopicId(null);
+      setDeletingCompanyId(null);
     }
   };
 
@@ -62,13 +62,13 @@ const TopicListPage: React.FC = () => {
 
   return (
     <PageLayout
-      title="Topics"
-      subtitle="Browse the forum structure or start a new discussion area."
+      title="Companies"
+      subtitle="Browse companies and open the discussion stream for each ticker."
       actions={
         <div className="action-row">
           {isAuthenticated ? (
-            <button className="button button--secondary" onClick={() => navigate("/topics/new")}>
-              New Topic
+            <button className="button button--secondary" onClick={() => navigate("/companies/new")}>
+              New Company
             </button>
           ) : null}
           {isBootstrapping ? null : isAuthenticated ? (
@@ -84,43 +84,43 @@ const TopicListPage: React.FC = () => {
       }
     >
       {!isAuthenticated && !isBootstrapping ? (
-        <Notice tone="info">You can browse topics publicly. Log in to create or manage content.</Notice>
+        <Notice tone="info">You can browse companies publicly. Log in to create or manage content.</Notice>
       ) : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       {actionError ? <Notice tone="error">{actionError}</Notice> : null}
-      {loading ? <p className="empty-state">Loading topics...</p> : null}
+      {loading ? <p className="empty-state">Loading companies...</p> : null}
 
-      {!loading && topics.length === 0 ? (
-        <p className="empty-state">No topics yet. Create the first one to get started.</p>
+      {!loading && companies.length === 0 ? (
+        <p className="empty-state">No companies yet. Add the first ticker to get started.</p>
       ) : null}
 
-      {!loading && topics.length > 0 ? (
+      {!loading && companies.length > 0 ? (
         <ul className="list">
-          {topics.map((topic) => (
+          {companies.map((company) => (
             <li
-              key={topic.id}
+              key={company.id}
               className="list-item list-item--interactive"
-              onClick={() => navigate(`/topics/${topic.id}`)}
+              onClick={() => navigate(`/companies/${company.id}`)}
             >
               <div className="action-row" style={{ justifyContent: "space-between" }}>
                 <div>
-                  <h2 className="content-title">{topic.title}</h2>
-                  <p className="content-body">{topic.description || "No description provided."}</p>
+                  <h2 className="content-title">{company.ticker}</h2>
+                  <p className="content-body">{company.name}</p>
+                  <p className="meta">{company.description || "No company summary provided."}</p>
                   <p className="meta">
-                    Created by user {topic.createdBy} on{" "}
-                    {new Date(topic.createdAt).toLocaleString()}
+                    Added by user {company.createdBy} on {new Date(company.createdAt).toLocaleString()}
                   </p>
                 </div>
-                {currentUser?.id === topic.createdBy ? (
+                {currentUser?.id === company.createdBy ? (
                   <button
                     className="button button--danger"
-                    disabled={deletingTopicId === topic.id}
+                    disabled={deletingCompanyId === company.id}
                     onClick={(event) => {
                       event.stopPropagation();
-                      void handleDelete(topic.id);
+                      void handleDelete(company.id);
                     }}
                   >
-                    {deletingTopicId === topic.id ? "Deleting..." : "Delete"}
+                    {deletingCompanyId === company.id ? "Deleting..." : "Delete"}
                   </button>
                 ) : null}
               </div>
@@ -132,4 +132,4 @@ const TopicListPage: React.FC = () => {
   );
 };
 
-export default TopicListPage;
+export default CompanyListPage;

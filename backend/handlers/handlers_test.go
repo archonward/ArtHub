@@ -91,39 +91,40 @@ func signupAndSessionCookie(t *testing.T, username string) (*User, *http.Cookie)
 	return &user, cookies[0]
 }
 
-func TestGetTopicByIDReturnsTopic(t *testing.T) {
+func TestGetCompanyByIDReturnsCompany(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 
 	result, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID)
 	if err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
-	topicID, _ := result.LastInsertId()
+	companyID, _ := result.LastInsertId()
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
-	GetTopicByID(recorder, req)
+	GetCompanyByID(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	topic := decodeSuccessEnvelope[Topic](t, recorder)
-	if int64(topic.ID) != topicID || topic.Title != "Markets" {
-		t.Fatalf("unexpected topic payload: %+v", topic)
+	company := decodeSuccessEnvelope[Company](t, recorder)
+	if int64(company.ID) != companyID || company.Ticker != "AAPL" || company.Name != "Apple Inc." {
+		t.Fatalf("unexpected company payload: %+v", company)
 	}
 }
 
-func TestCreateTopicRequiresAuthentication(t *testing.T) {
+func TestCreateCompanyRequiresAuthentication(t *testing.T) {
 	setupTestDB(t)
 
-	recorder := executeJSONRequest(CreateTopic, http.MethodPost, "/topics", map[string]any{
-		"title":       "Markets",
+	recorder := executeJSONRequest(CreateCompany, http.MethodPost, "/companies", map[string]any{
+		"ticker":      "AAPL",
+		"name":        "Apple Inc.",
 		"description": "desc",
 	})
 
@@ -137,48 +138,50 @@ func TestCreateTopicRequiresAuthentication(t *testing.T) {
 	}
 }
 
-func TestCreateTopicUsesAuthenticatedUserInsteadOfCreatedByPayload(t *testing.T) {
+func TestCreateCompanyUsesAuthenticatedUserInsteadOfPayload(t *testing.T) {
 	setupTestDB(t)
 	user, cookie := signupAndSessionCookie(t, "owner")
 
 	payload, _ := json.Marshal(map[string]any{
-		"title":       "Markets",
+		"ticker":      " aapl ",
+		"name":        "Apple Inc.",
 		"description": "desc",
 		"created_by":  999,
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/topics", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/companies", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(cookie)
 	recorder := httptest.NewRecorder()
 
-	CreateTopic(recorder, req)
+	CreateCompany(recorder, req)
 
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", recorder.Code)
 	}
 
-	topic := decodeSuccessEnvelope[Topic](t, recorder)
-	if topic.CreatedBy != user.ID {
-		t.Fatalf("expected created_by=%d, got %+v", user.ID, topic)
+	company := decodeSuccessEnvelope[Company](t, recorder)
+	if company.CreatedBy != user.ID || company.Ticker != "AAPL" {
+		t.Fatalf("expected normalized company owned by %d, got %+v", user.ID, company)
 	}
 }
 
-func TestCreateTopicRejectsXUserIDBypassWithoutSession(t *testing.T) {
+func TestCreateCompanyRejectsXUserIDBypassWithoutSession(t *testing.T) {
 	setupTestDB(t)
 
 	payload, _ := json.Marshal(map[string]any{
-		"title":       "Markets",
+		"ticker":      "AAPL",
+		"name":        "Apple Inc.",
 		"description": "desc",
 		"created_by":  1,
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/topics", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/companies", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-User-ID", "1")
 	recorder := httptest.NewRecorder()
 
-	CreateTopic(recorder, req)
+	CreateCompany(recorder, req)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", recorder.Code)
@@ -190,32 +193,32 @@ func TestCreateTopicRejectsXUserIDBypassWithoutSession(t *testing.T) {
 	}
 }
 
-func TestUpdateTopicRejectsNonOwnerEvenWithSpoofedXUserID(t *testing.T) {
+func TestUpdateCompanyRejectsNonOwnerEvenWithSpoofedXUserID(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
-	otherUser, otherCookie := signupAndSessionCookie(t, "other")
+	_, otherCookie := signupAndSessionCookie(t, "other")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	payload, _ := json.Marshal(map[string]string{
-		"title":       "Updated",
+		"ticker":      "MSFT",
+		"name":        "Microsoft Corp.",
 		"description": "Updated description",
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/topics/1", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPut, "/companies/1", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-User-ID", "1")
 	req.AddCookie(otherCookie)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	_ = otherUser
-	UpdateTopic(recorder, req)
+	UpdateCompany(recorder, req)
 
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", recorder.Code)
@@ -227,37 +230,38 @@ func TestUpdateTopicRejectsNonOwnerEvenWithSpoofedXUserID(t *testing.T) {
 	}
 }
 
-func TestUpdateTopicSucceedsForOwnerSession(t *testing.T) {
+func TestUpdateCompanySucceedsForOwnerSession(t *testing.T) {
 	setupTestDB(t)
 	owner, ownerCookie := signupAndSessionCookie(t, "owner")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	payload, _ := json.Marshal(map[string]string{
-		"title":       "Updated",
+		"ticker":      "MSFT",
+		"name":        "Microsoft Corp.",
 		"description": "Updated description",
 	})
 
-	req := httptest.NewRequest(http.MethodPut, "/topics/1", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPut, "/companies/1", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(ownerCookie)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	UpdateTopic(recorder, req)
+	UpdateCompany(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	topic := decodeSuccessEnvelope[Topic](t, recorder)
-	if topic.Title != "Updated" {
-		t.Fatalf("expected updated topic, got %+v", topic)
+	company := decodeSuccessEnvelope[Company](t, recorder)
+	if company.Ticker != "MSFT" || company.Name != "Microsoft Corp." {
+		t.Fatalf("expected updated company, got %+v", company)
 	}
 }
 
@@ -266,14 +270,14 @@ func TestDeletePostRequiresAuthentication(t *testing.T) {
 	owner, _ := signupAndSessionCookie(t, "owner")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -296,14 +300,14 @@ func TestCreateCommentUsesAuthenticatedUserInsteadOfCreatedByPayload(t *testing.
 	commenter, commentCookie := signupAndSessionCookie(t, "commenter")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -320,7 +324,6 @@ func TestCreateCommentUsesAuthenticatedUserInsteadOfCreatedByPayload(t *testing.
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	_ = commenter
 	CreateComment(recorder, req)
 
 	if recorder.Code != http.StatusCreated {
@@ -338,14 +341,14 @@ func TestVoteOnPostRequiresAuthentication(t *testing.T) {
 	owner, _ := signupAndSessionCookie(t, "owner")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -369,14 +372,14 @@ func TestVoteOnPostReturnsUpdatedVoteSummary(t *testing.T) {
 	voter, voterCookie := signupAndSessionCookie(t, "voter")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -417,14 +420,14 @@ func TestVoteOnPostSwitchesExistingVote(t *testing.T) {
 	voter, voterCookie := signupAndSessionCookie(t, "voter")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -471,14 +474,14 @@ func TestVoteOnPostIsIdempotentForSameValue(t *testing.T) {
 	voter, voterCookie := signupAndSessionCookie(t, "voter")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -520,14 +523,14 @@ func TestDeletePostVoteRemovesCurrentUsersVote(t *testing.T) {
 	voter, voterCookie := signupAndSessionCookie(t, "voter")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by)
+		INSERT INTO posts (company_id, title, content, created_by)
 		VALUES (1, 'First post', 'Body copy', ?)
 	`, owner.ID); err != nil {
 		t.Fatalf("insert post: %v", err)
@@ -560,29 +563,29 @@ func TestDeletePostVoteRemovesCurrentUsersVote(t *testing.T) {
 	}
 }
 
-func TestGetPostsByTopicSortsByTop(t *testing.T) {
+func TestGetPostsByCompanySortsByTop(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 	voterA, _ := signupAndSessionCookie(t, "voterA")
 	voterB, _ := signupAndSessionCookie(t, "voterB")
 
-	insertTopicAndPostsForSorting(t, owner.ID)
+	insertCompanyAndPostsForSorting(t, owner.ID)
 
 	if _, err := db().Exec(`INSERT INTO votes (user_id, post_id, vote_value) VALUES (?, 1, 1), (?, 1, 1), (?, 2, 1)`, voterA.ID, voterB.ID, voterA.ID); err != nil {
 		t.Fatalf("insert votes: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=top", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?sort=top", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	page := decodeSuccessEnvelope[TopicPostsPage](t, recorder)
+	page := decodeSuccessEnvelope[CompanyPostsPage](t, recorder)
 	posts := page.Posts
 	if len(posts) != 3 {
 		t.Fatalf("expected 3 posts, got %d", len(posts))
@@ -595,23 +598,23 @@ func TestGetPostsByTopicSortsByTop(t *testing.T) {
 	}
 }
 
-func TestGetPostsByTopicSortsByNew(t *testing.T) {
+func TestGetPostsByCompanySortsByNew(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 
-	insertTopicAndPostsForSorting(t, owner.ID)
+	insertCompanyAndPostsForSorting(t, owner.ID)
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=new", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?sort=new", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	posts := decodeSuccessEnvelope[TopicPostsPage](t, recorder).Posts
+	posts := decodeSuccessEnvelope[CompanyPostsPage](t, recorder).Posts
 	if len(posts) != 3 {
 		t.Fatalf("expected 3 posts, got %d", len(posts))
 	}
@@ -620,20 +623,20 @@ func TestGetPostsByTopicSortsByNew(t *testing.T) {
 	}
 }
 
-func TestGetPostsByTopicTopSortUsesDeterministicTieBreakers(t *testing.T) {
+func TestGetPostsByCompanyTopSortUsesDeterministicTieBreakers(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 	voter, _ := signupAndSessionCookie(t, "voter")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by, created_at)
+		INSERT INTO posts (company_id, title, content, created_by, created_at)
 		VALUES
 			(1, 'Post A', 'Body A', ?, '2026-04-06 10:00:00'),
 			(1, 'Post B', 'Body B', ?, '2026-04-06 10:00:00')
@@ -645,38 +648,38 @@ func TestGetPostsByTopicTopSortUsesDeterministicTieBreakers(t *testing.T) {
 		t.Fatalf("insert votes: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=top", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?sort=top", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	posts := decodeSuccessEnvelope[TopicPostsPage](t, recorder).Posts
+	posts := decodeSuccessEnvelope[CompanyPostsPage](t, recorder).Posts
 	if posts[0].ID != 2 || posts[1].ID != 1 {
 		t.Fatalf("expected id DESC tie-break, got %+v", posts)
 	}
 }
 
-func TestGetPostsByTopicRejectsInvalidSort(t *testing.T) {
+func TestGetPostsByCompanyRejectsInvalidSort(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=hot", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?sort=hot", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", recorder.Code)
@@ -688,23 +691,23 @@ func TestGetPostsByTopicRejectsInvalidSort(t *testing.T) {
 	}
 }
 
-func TestGetPostsByTopicPaginatesResultsAcrossPages(t *testing.T) {
+func TestGetPostsByCompanyPaginatesResultsAcrossPages(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 
-	insertTopicAndPostsForSorting(t, owner.ID)
+	insertCompanyAndPostsForSorting(t, owner.ID)
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=new&page=2&pageSize=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?sort=new&page=2&pageSize=1", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	page := decodeSuccessEnvelope[TopicPostsPage](t, recorder)
+	page := decodeSuccessEnvelope[CompanyPostsPage](t, recorder)
 	if len(page.Posts) != 1 || page.Posts[0].ID != 2 {
 		t.Fatalf("unexpected page posts: %+v", page.Posts)
 	}
@@ -716,50 +719,50 @@ func TestGetPostsByTopicPaginatesResultsAcrossPages(t *testing.T) {
 	}
 }
 
-func TestGetPostsByTopicPaginationPreservesSortMode(t *testing.T) {
+func TestGetPostsByCompanyPaginationPreservesSortMode(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 	voterA, _ := signupAndSessionCookie(t, "voterA")
 	voterB, _ := signupAndSessionCookie(t, "voterB")
 
-	insertTopicAndPostsForSorting(t, owner.ID)
+	insertCompanyAndPostsForSorting(t, owner.ID)
 
 	if _, err := db().Exec(`INSERT INTO votes (user_id, post_id, vote_value) VALUES (?, 1, 1), (?, 1, 1), (?, 2, 1)`, voterA.ID, voterB.ID, voterA.ID); err != nil {
 		t.Fatalf("insert votes: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=top&page=2&pageSize=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?sort=top&page=2&pageSize=1", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", recorder.Code)
 	}
 
-	page := decodeSuccessEnvelope[TopicPostsPage](t, recorder)
+	page := decodeSuccessEnvelope[CompanyPostsPage](t, recorder)
 	if len(page.Posts) != 1 || page.Posts[0].ID != 2 {
 		t.Fatalf("unexpected paginated top sort result: %+v", page.Posts)
 	}
 }
 
-func TestGetPostsByTopicRejectsInvalidPage(t *testing.T) {
+func TestGetPostsByCompanyRejectsInvalidPage(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?page=0", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?page=0", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", recorder.Code)
@@ -771,22 +774,22 @@ func TestGetPostsByTopicRejectsInvalidPage(t *testing.T) {
 	}
 }
 
-func TestGetPostsByTopicRejectsInvalidPageSize(t *testing.T) {
+func TestGetPostsByCompanyRejectsInvalidPageSize(t *testing.T) {
 	setupTestDB(t)
 	owner, _ := signupAndSessionCookie(t, "owner")
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, owner.ID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?pageSize=100", nil)
+	req := httptest.NewRequest(http.MethodGet, "/companies/1/posts?pageSize=100", nil)
 	req.SetPathValue("id", "1")
 	recorder := httptest.NewRecorder()
 
-	GetPostsByTopic(recorder, req)
+	GetPostsByCompany(recorder, req)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", recorder.Code)
@@ -798,18 +801,18 @@ func TestGetPostsByTopicRejectsInvalidPageSize(t *testing.T) {
 	}
 }
 
-func insertTopicAndPostsForSorting(t *testing.T, ownerID int) {
+func insertCompanyAndPostsForSorting(t *testing.T, ownerID int) {
 	t.Helper()
 
 	if _, err := db().Exec(`
-		INSERT INTO topics (title, description, created_by)
-		VALUES ('Markets', 'Research discussion', ?)
+		INSERT INTO companies (ticker, name, description, created_by)
+		VALUES ('AAPL', 'Apple Inc.', 'Research discussion', ?)
 	`, ownerID); err != nil {
-		t.Fatalf("insert topic: %v", err)
+		t.Fatalf("insert company: %v", err)
 	}
 
 	if _, err := db().Exec(`
-		INSERT INTO posts (topic_id, title, body, created_by, created_at)
+		INSERT INTO posts (company_id, title, content, created_by, created_at)
 		VALUES
 			(1, 'Oldest', 'Body 1', ?, '2026-04-06 08:00:00'),
 			(1, 'Middle', 'Body 2', ?, '2026-04-06 09:00:00'),

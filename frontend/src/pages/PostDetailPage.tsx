@@ -58,7 +58,7 @@ const PostDetailPage: React.FC = () => {
       setActionError(null);
       setDeleting(true);
       await forumApi.deletePost(post.id);
-      navigate(`/topics/${post.topicId}`);
+      navigate(`/companies/${post.companyId}`);
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Failed to delete post.",

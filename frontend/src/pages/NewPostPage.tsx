@@ -13,13 +13,13 @@ const NewPostPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const topicId = Number(id);
+  const companyId = Number(id);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!topicId) {
-      setError("Topic ID is missing.");
+    if (!companyId) {
+      setError("Company ID is missing.");
       return;
     }
 
@@ -32,11 +32,11 @@ const NewPostPage: React.FC = () => {
     setError(null);
 
     try {
-      await forumApi.createPost(topicId, {
+      await forumApi.createPost(companyId, {
         title: title.trim(),
         body: body.trim(),
       });
-      navigate(`/topics/${topicId}`);
+      navigate(`/companies/${companyId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create post.");
     } finally {
@@ -45,7 +45,7 @@ const NewPostPage: React.FC = () => {
   };
 
   return (
-    <PageLayout title="Create Post" subtitle="Add a new thread inside this topic.">
+    <PageLayout title="Create Post" subtitle="Add a new thread for this company.">
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <form className="form-grid" onSubmit={handleSubmit}>
@@ -77,7 +77,7 @@ const NewPostPage: React.FC = () => {
           <button
             className="button button--secondary"
             type="button"
-            onClick={() => navigate(topicId ? `/topics/${topicId}` : "/topics")}
+            onClick={() => navigate(companyId ? `/companies/${companyId}` : "/companies")}
             disabled={loading}
           >
             Cancel

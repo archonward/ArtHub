@@ -1,28 +1,28 @@
 import type {
   Comment,
   CommentDto,
+  Company,
+  CompanyDetails,
+  CompanyDto,
+  CompanyPostsPageDto,
   CreateCommentInput,
+  CreateCompanyInput,
   CreatePostInput,
-  CreateTopicInput,
   DeleteResultDto,
   Post,
-  PostSort,
   PostDto,
-  Topic,
-  TopicDetails,
-  TopicPostsPageDto,
-  TopicDto,
+  PostSort,
+  UpdateCompanyInput,
   UpdatePostInput,
-  UpdateTopicInput,
   User,
   UserDto,
   VoteInput,
 } from "../../types";
 import {
   mapComment,
+  mapCompany,
   mapPagination,
   mapPost,
-  mapTopic,
   mapUser,
 } from "../../types";
 import { request } from "./client";
@@ -58,70 +58,74 @@ export const forumApi = {
     return mapUser(user);
   },
 
-  getTopics: async (): Promise<Topic[]> => {
-    const topics = await request<TopicDto[]>("/topics");
-    return topics.map(mapTopic);
+  getCompanies: async (): Promise<Company[]> => {
+    const companies = await request<CompanyDto[]>("/companies");
+    return companies.map(mapCompany);
   },
 
-  getTopic: async (id: number): Promise<Topic> => {
-    const topic = await request<TopicDto>(`/topics/${id}`);
-    return mapTopic(topic);
+  getCompany: async (id: number): Promise<Company> => {
+    const company = await request<CompanyDto>(`/companies/${id}`);
+    return mapCompany(company);
   },
 
-  getTopicPosts: async (
+  getCompanyPosts: async (
     id: number,
     sort: PostSort = "top",
     page = 1,
     pageSize = 10,
-  ): Promise<{ posts: Post[]; pagination: TopicDetails["pagination"] }> => {
-    const topicPostsPage = await request<TopicPostsPageDto>(
-      `/topics/${id}/posts?sort=${encodeURIComponent(sort)}&page=${page}&pageSize=${pageSize}`,
+  ): Promise<{ posts: Post[]; pagination: CompanyDetails["pagination"] }> => {
+    const companyPostsPage = await request<CompanyPostsPageDto>(
+      `/companies/${id}/posts?sort=${encodeURIComponent(sort)}&page=${page}&pageSize=${pageSize}`,
     );
     return {
-      posts: topicPostsPage.posts.map(mapPost),
-      pagination: mapPagination(topicPostsPage.pagination),
+      posts: companyPostsPage.posts.map(mapPost),
+      pagination: mapPagination(companyPostsPage.pagination),
     };
   },
 
-  getTopicDetails: async (
+  getCompanyDetails: async (
     id: number,
     sort: PostSort = "top",
     page = 1,
     pageSize = 10,
-  ): Promise<TopicDetails> => {
-    const [topic, topicPostsPage] = await Promise.all([
-      forumApi.getTopic(id),
-      forumApi.getTopicPosts(id, sort, page, pageSize),
+  ): Promise<CompanyDetails> => {
+    const [company, companyPostsPage] = await Promise.all([
+      forumApi.getCompany(id),
+      forumApi.getCompanyPosts(id, sort, page, pageSize),
     ]);
 
     return {
-      topic,
-      posts: topicPostsPage.posts,
-      pagination: topicPostsPage.pagination,
+      company,
+      posts: companyPostsPage.posts,
+      pagination: companyPostsPage.pagination,
     };
   },
 
-  createTopic: async (input: CreateTopicInput): Promise<Topic> => {
-    const topic = await request<TopicDto>("/topics", {
+  createCompany: async (input: CreateCompanyInput): Promise<Company> => {
+    const company = await request<CompanyDto>("/companies", {
       method: "POST",
       body: {
-        title: input.title,
+        ticker: input.ticker,
+        name: input.name,
         description: input.description,
       },
     });
-    return mapTopic(topic);
+    return mapCompany(company);
   },
 
-  updateTopic: async (id: number, input: UpdateTopicInput): Promise<Topic> => {
-    const topic = await request<TopicDto>(`/topics/${id}`, {
+  updateCompany: async (
+    id: number,
+    input: UpdateCompanyInput,
+  ): Promise<Company> => {
+    const company = await request<CompanyDto>(`/companies/${id}`, {
       method: "PUT",
       body: input,
     });
-    return mapTopic(topic);
+    return mapCompany(company);
   },
 
-  deleteTopic: (id: number): Promise<void> =>
-    request<DeleteResultDto>(`/topics/${id}`, { method: "DELETE" }).then(
+  deleteCompany: (id: number): Promise<void> =>
+    request<DeleteResultDto>(`/companies/${id}`, { method: "DELETE" }).then(
       () => undefined,
     ),
 
@@ -131,10 +135,10 @@ export const forumApi = {
   },
 
   createPost: async (
-    topicId: number,
+    companyId: number,
     input: CreatePostInput,
   ): Promise<Post> => {
-    const post = await request<PostDto>(`/topics/${topicId}/posts`, {
+    const post = await request<PostDto>(`/companies/${companyId}/posts`, {
       method: "POST",
       body: {
         title: input.title,

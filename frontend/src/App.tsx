@@ -2,15 +2,15 @@ import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-d
 import PageLayout from "./components/PageLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import CompanyDetailPage from "./pages/CompanyDetailPage";
+import CompanyListPage from "./pages/CompanyListPage";
+import EditCompanyPage from "./pages/EditCompanyPage";
 import EditPostPage from "./pages/EditPostPage";
-import EditTopicPage from "./pages/EditTopicPage";
 import LoginPage from "./pages/LoginPage";
 import NewPostPage from "./pages/NewPostPage";
-import NewTopicPage from "./pages/NewTopicPage";
+import NewCompanyPage from "./pages/NewCompanyPage";
 import PostDetailPage from "./pages/PostDetailPage";
 import SignupPage from "./pages/SignupPage";
-import TopicDetailPage from "./pages/TopicDetailPage";
-import TopicListPage from "./pages/TopicListPage";
 
 function RootRedirect() {
   const { isAuthenticated, isBootstrapping } = useAuth();
@@ -23,7 +23,7 @@ function RootRedirect() {
     );
   }
 
-  return <Navigate to={isAuthenticated ? "/topics" : "/login"} replace />;
+  return <Navigate to={isAuthenticated ? "/companies" : "/login"} replace />;
 }
 
 function App() {
@@ -34,14 +34,14 @@ function App() {
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route path="/topics" element={<TopicListPage />} />
-          <Route path="/topics/:id" element={<TopicDetailPage />} />
+          <Route path="/companies" element={<CompanyListPage />} />
+          <Route path="/companies/:id" element={<CompanyDetailPage />} />
           <Route path="/posts/:postId" element={<PostDetailPage />} />
 
           <Route element={<ProtectedRoute />}>
-            <Route path="/topics/new" element={<NewTopicPage />} />
-            <Route path="/topics/:id/posts/new" element={<NewPostPage />} />
-            <Route path="/topics/:id/edit" element={<EditTopicPage />} />
+            <Route path="/companies/new" element={<NewCompanyPage />} />
+            <Route path="/companies/:id/posts/new" element={<NewPostPage />} />
+            <Route path="/companies/:id/edit" element={<EditCompanyPage />} />
             <Route path="/posts/:postId/edit" element={<EditPostPage />} />
           </Route>
         </Routes>

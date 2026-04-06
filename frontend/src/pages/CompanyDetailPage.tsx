@@ -5,15 +5,15 @@ import PageLayout from "../components/PageLayout";
 import PostVoteControls from "../components/PostVoteControls";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
-import type { Pagination, Post, PostSort, Topic } from "../types";
+import type { Company, Pagination, Post, PostSort } from "../types";
 
-const TOPIC_POSTS_PAGE_SIZE = 10;
+const COMPANY_POSTS_PAGE_SIZE = 10;
 
-const TopicDetailPage: React.FC = () => {
+const CompanyDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentUser, isAuthenticated } = useAuth();
-  const [topic, setTopic] = useState<Topic | null>(null);
+  const [company, setCompany] = useState<Company | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [sort, setSort] = useState<PostSort>("top");
   const [page, setPage] = useState(1);
@@ -23,102 +23,95 @@ const TopicDetailPage: React.FC = () => {
 
   const handlePostChange = (updatedPost: Post) => {
     setPosts((currentPosts) =>
-      currentPosts.map((post) =>
-        post.id === updatedPost.id ? updatedPost : post,
-      ),
+      currentPosts.map((post) => (post.id === updatedPost.id ? updatedPost : post)),
     );
   };
 
   useEffect(() => {
-    const topicId = Number(id);
-    if (!topicId) {
-      setError("Invalid topic ID.");
+    const companyId = Number(id);
+    if (!companyId) {
+      setError("Invalid company ID.");
       setLoading(false);
       return;
     }
 
-    const fetchTopic = async () => {
+    const fetchCompany = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const details = await forumApi.getTopicDetails(
-          topicId,
+        const details = await forumApi.getCompanyDetails(
+          companyId,
           sort,
           page,
-          TOPIC_POSTS_PAGE_SIZE,
+          COMPANY_POSTS_PAGE_SIZE,
         );
-        setTopic(details.topic);
+        setCompany(details.company);
         setPosts(details.posts);
         setPagination(details.pagination);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load topic.");
+        setError(err instanceof Error ? err.message : "Failed to load company.");
       } finally {
         setLoading(false);
       }
     };
 
-    void fetchTopic();
+    void fetchCompany();
   }, [id, sort, page]);
 
   if (loading) {
     return (
-      <PageLayout title="Topic" subtitle="Loading discussion area...">
-        <p className="empty-state">Loading topic...</p>
+      <PageLayout title="Company" subtitle="Loading company discussion...">
+        <p className="empty-state">Loading company...</p>
       </PageLayout>
     );
   }
 
-  if (error || !topic) {
+  if (error || !company) {
     return (
-      <PageLayout title="Topic" subtitle="Discussion area unavailable.">
-        <Notice tone="error">{error || "Topic not found."}</Notice>
+      <PageLayout title="Company" subtitle="Discussion area unavailable.">
+        <Notice tone="error">{error || "Company not found."}</Notice>
       </PageLayout>
     );
   }
 
   return (
     <PageLayout
-      title={topic.title}
-      subtitle={topic.description || "No description provided."}
+      title={company.ticker}
+      subtitle={company.name}
       actions={
         <div className="action-row">
-          <button
-            className="button button--secondary"
-            onClick={() => navigate("/topics")}
-          >
-            Back to Topics
+          <button className="button button--secondary" onClick={() => navigate("/companies")}>
+            Back to Companies
           </button>
           {isAuthenticated ? (
             <button
               className="button button--secondary"
-              onClick={() => navigate(`/topics/${topic.id}/posts/new`)}
+              onClick={() => navigate(`/companies/${company.id}/posts/new`)}
             >
               New Post
             </button>
           ) : null}
-          {currentUser?.id === topic.createdBy ? (
+          {currentUser?.id === company.createdBy ? (
             <button
               className="button button--ghost"
-              onClick={() => navigate(`/topics/${topic.id}/edit`)}
+              onClick={() => navigate(`/companies/${company.id}/edit`)}
             >
-              Edit Topic
+              Edit Company
             </button>
           ) : null}
         </div>
       }
     >
+      <p className="meta">{company.description || "No company summary provided."}</p>
       {!isAuthenticated ? (
-        <Notice tone="info">
-          Log in if you want to create a post in this topic.
-        </Notice>
+        <Notice tone="info">Log in if you want to create a post for this company.</Notice>
       ) : null}
-      {currentUser && currentUser.id !== topic.createdBy ? (
-        <Notice tone="info">Only the topic owner can edit this topic.</Notice>
+      {currentUser && currentUser.id !== company.createdBy ? (
+        <Notice tone="info">Only the company owner can edit this company profile.</Notice>
       ) : null}
       <p className="meta">
-        Created by user {topic.createdBy} on{" "}
-        {new Date(topic.createdAt).toLocaleString()}
+        Added by user {company.createdBy} on {new Date(company.createdAt).toLocaleString()}
       </p>
 
       <div className="stack">
@@ -141,9 +134,7 @@ const TopicDetailPage: React.FC = () => {
         </div>
 
         {posts.length === 0 ? (
-          <p className="empty-state">
-            No posts yet. Create the first post in this topic.
-          </p>
+          <p className="empty-state">No posts yet. Create the first post for this company.</p>
         ) : (
           <ul className="list">
             {posts.map((post) => (
@@ -154,16 +145,11 @@ const TopicDetailPage: React.FC = () => {
               >
                 <div className="list-item__header">
                   <h3>{post.title}</h3>
-                  <PostVoteControls
-                    post={post}
-                    onPostChange={handlePostChange}
-                    compact
-                  />
+                  <PostVoteControls post={post} onPostChange={handlePostChange} compact />
                 </div>
                 <p className="content-body">{post.body}</p>
                 <p className="meta">
-                  Created by user {post.createdBy} on{" "}
-                  {new Date(post.createdAt).toLocaleString()}
+                  Created by user {post.createdBy} on {new Date(post.createdAt).toLocaleString()}
                 </p>
               </li>
             ))}
@@ -176,9 +162,7 @@ const TopicDetailPage: React.FC = () => {
               className="button button--secondary"
               type="button"
               disabled={!pagination.hasPrev}
-              onClick={() =>
-                setPage((currentPage) => Math.max(1, currentPage - 1))
-              }
+              onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
             >
               Previous
             </button>
@@ -206,4 +190,4 @@ const TopicDetailPage: React.FC = () => {
   );
 };
 
-export default TopicDetailPage;
+export default CompanyDetailPage;

@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
-import TopicDetailPage from "./TopicDetailPage";
+import CompanyDetailPage from "./CompanyDetailPage";
 
 jest.mock("../context/AuthContext", () => ({
   useAuth: jest.fn(),
@@ -10,7 +10,7 @@ jest.mock("../context/AuthContext", () => ({
 
 jest.mock("../services/api/forumApi", () => ({
   forumApi: {
-    getTopicDetails: jest.fn(),
+    getCompanyDetails: jest.fn(),
   },
 }));
 
@@ -30,7 +30,7 @@ let consoleErrorSpy: jest.SpyInstance;
 const topPosts = [
   {
     id: 1,
-    topicId: 7,
+    companyId: 7,
     title: "Highest voted",
     body: "Body A",
     createdBy: 2,
@@ -40,7 +40,7 @@ const topPosts = [
   },
   {
     id: 2,
-    topicId: 7,
+    companyId: 7,
     title: "Newest but lower score",
     body: "Body B",
     createdBy: 2,
@@ -54,18 +54,13 @@ const newPosts = [topPosts[1], topPosts[0]];
 const firstPageTopPosts = [topPosts[0]];
 const secondPageTopPosts = [topPosts[1]];
 
-describe("TopicDetailPage sorting", () => {
+describe("CompanyDetailPage sorting", () => {
   beforeEach(() => {
-    consoleErrorSpy = jest
-      .spyOn(console, "error")
-      .mockImplementation((message?: unknown) => {
-        if (
-          typeof message === "string" &&
-          message.includes("not wrapped in act")
-        ) {
-          return;
-        }
-      });
+    consoleErrorSpy = jest.spyOn(console, "error").mockImplementation((message?: unknown) => {
+      if (typeof message === "string" && message.includes("not wrapped in act")) {
+        return;
+      }
+    });
 
     mockedUseAuth.mockReturnValue({
       currentUser: { id: 2, username: "arthur" },
@@ -78,21 +73,17 @@ describe("TopicDetailPage sorting", () => {
       refreshCurrentUser: jest.fn(),
     });
 
-    mockedForumApi.getTopicDetails.mockImplementation(
+    mockedForumApi.getCompanyDetails.mockImplementation(
       async (_id: number, sort = "top", page = 1) => ({
-        topic: {
+        company: {
           id: 7,
-          title: "Art theory",
+          ticker: "AAPL",
+          name: "Apple Inc.",
           description: "Discussion",
           createdBy: 2,
           createdAt: "2026-04-06T08:00:00Z",
         },
-        posts:
-          sort === "new"
-            ? newPosts
-            : page === 2
-              ? secondPageTopPosts
-              : firstPageTopPosts,
+        posts: sort === "new" ? newPosts : page === 2 ? secondPageTopPosts : firstPageTopPosts,
         pagination: {
           page,
           pageSize: 10,
@@ -112,24 +103,19 @@ describe("TopicDetailPage sorting", () => {
 
   it("loads top sort by default and reflects the selected option", async () => {
     await act(async () => {
-      render(<TopicDetailPage />);
+      render(<CompanyDetailPage />);
     });
 
     expect(await screen.findByText("Highest voted")).toBeInTheDocument();
 
     const sortSelect = screen.getByLabelText("Sort");
     expect(sortSelect).toHaveValue("top");
-    expect(mockedForumApi.getTopicDetails).toHaveBeenCalledWith(
-      7,
-      "top",
-      1,
-      10,
-    );
+    expect(mockedForumApi.getCompanyDetails).toHaveBeenCalledWith(7, "top", 1, 10);
   });
 
   it("reloads posts when switching to new sort", async () => {
     await act(async () => {
-      render(<TopicDetailPage />);
+      render(<CompanyDetailPage />);
     });
 
     await screen.findByText("Highest voted");
@@ -137,24 +123,17 @@ describe("TopicDetailPage sorting", () => {
     await userEvent.selectOptions(screen.getByLabelText("Sort"), "new");
 
     await waitFor(() => {
-      expect(mockedForumApi.getTopicDetails).toHaveBeenLastCalledWith(
-        7,
-        "new",
-        1,
-        10,
-      );
+      expect(mockedForumApi.getCompanyDetails).toHaveBeenLastCalledWith(7, "new", 1, 10);
     });
 
-    const titles = screen
-      .getAllByRole("heading", { level: 3 })
-      .map((node) => node.textContent);
+    const titles = screen.getAllByRole("heading", { level: 3 }).map((node) => node.textContent);
     expect(titles).toEqual(["Newest but lower score", "Highest voted"]);
     expect(screen.getByLabelText("Sort")).toHaveValue("new");
   });
 
   it("requests the next page and preserves the current sort", async () => {
     await act(async () => {
-      render(<TopicDetailPage />);
+      render(<CompanyDetailPage />);
     });
 
     await screen.findByText("Highest voted");
@@ -162,12 +141,7 @@ describe("TopicDetailPage sorting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
 
     await waitFor(() => {
-      expect(mockedForumApi.getTopicDetails).toHaveBeenLastCalledWith(
-        7,
-        "top",
-        2,
-        10,
-      );
+      expect(mockedForumApi.getCompanyDetails).toHaveBeenLastCalledWith(7, "top", 2, 10);
     });
 
     expect(screen.getByText("Newest but lower score")).toBeInTheDocument();

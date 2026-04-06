@@ -22,7 +22,7 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (!isBootstrapping && isAuthenticated) {
-      navigate("/topics", { replace: true });
+      navigate("/companies", { replace: true });
     }
   }, [isAuthenticated, isBootstrapping, navigate]);
 
@@ -50,7 +50,7 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(username.trim(), password);
-      const redirectTo = (location.state as LoginLocationState | null)?.from?.pathname || "/topics";
+      const redirectTo = (location.state as LoginLocationState | null)?.from?.pathname || "/companies";
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed.");
@@ -62,7 +62,7 @@ const LoginPage: React.FC = () => {
   return (
     <PageLayout
       title="ArtHub"
-      subtitle="Log in to manage your topics, posts, and comments."
+      subtitle="Log in to manage companies, posts, and comments."
       narrow
     >
       {authNotice ? <Notice tone="info">{authNotice}</Notice> : null}

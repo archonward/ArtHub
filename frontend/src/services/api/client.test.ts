@@ -22,7 +22,7 @@ describe("request", () => {
       text: async () => "",
     });
 
-    await expect(request("/topics", { method: "POST" })).rejects.toEqual(
+    await expect(request("/companies", { method: "POST" })).rejects.toEqual(
       new ApiError("authentication required", 401, "not_authenticated"),
     );
 

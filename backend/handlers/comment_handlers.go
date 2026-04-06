@@ -35,7 +35,7 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := db().Query(`
-		SELECT id, post_id, body, created_by, created_at
+		SELECT id, post_id, content AS body, created_by, created_at, updated_at
 		FROM comments
 		WHERE post_id = ?
 		ORDER BY created_at ASC
@@ -50,7 +50,7 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 	comments := make([]Comment, 0)
 	for rows.Next() {
 		var comment Comment
-		if err := rows.Scan(&comment.ID, &comment.PostID, &comment.Body, &comment.CreatedBy, &comment.CreatedAt); err != nil {
+		if err := rows.Scan(&comment.ID, &comment.PostID, &comment.Body, &comment.CreatedBy, &comment.CreatedAt, &comment.UpdatedAt); err != nil {
 			log.Printf("GetCommentsByPost scan failed: %v", err)
 			writeError(w, http.StatusInternalServerError, "comments_parse_failed", "failed to parse comments")
 			return
@@ -109,7 +109,7 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := db().Exec(`
-		INSERT INTO comments (post_id, body, created_by)
+		INSERT INTO comments (post_id, content, created_by)
 		VALUES (?, ?, ?)
 	`, postID, input.Body, user.ID)
 	if err != nil {
@@ -126,10 +126,10 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 
 	var comment Comment
 	err = db().QueryRow(`
-		SELECT id, post_id, body, created_by, created_at
+		SELECT id, post_id, content AS body, created_by, created_at, updated_at
 		FROM comments
 		WHERE id = ?
-	`, id).Scan(&comment.ID, &comment.PostID, &comment.Body, &comment.CreatedBy, &comment.CreatedAt)
+	`, id).Scan(&comment.ID, &comment.PostID, &comment.Body, &comment.CreatedBy, &comment.CreatedAt, &comment.UpdatedAt)
 	if err != nil {
 		log.Printf("CreateComment reload failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "comment_query_failed", "failed to retrieve comment")

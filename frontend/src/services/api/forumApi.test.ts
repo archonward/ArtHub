@@ -77,7 +77,7 @@ describe("forumApi", () => {
     );
   });
 
-  it("requests topic posts with the selected sort mode", async () => {
+  it("requests company posts with the selected sort mode", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
@@ -86,7 +86,7 @@ describe("forumApi", () => {
           posts: [
             {
               id: 10,
-              topic_id: 4,
+              company_id: 4,
               title: "Post",
               body: "Body",
               created_by: 2,
@@ -107,11 +107,11 @@ describe("forumApi", () => {
       }),
     });
 
-    await expect(forumApi.getTopicPosts(4, "new", 2, 5)).resolves.toEqual({
+    await expect(forumApi.getCompanyPosts(4, "new", 2, 5)).resolves.toEqual({
       posts: [
         {
           id: 10,
-          topicId: 4,
+          companyId: 4,
           title: "Post",
           body: "Body",
           createdBy: 2,
@@ -131,7 +131,7 @@ describe("forumApi", () => {
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8080/topics/4/posts?sort=new&page=2&pageSize=5",
+      "http://localhost:8080/companies/4/posts?sort=new&page=2&pageSize=5",
       expect.objectContaining({
         credentials: "include",
       }),

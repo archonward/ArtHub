@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -193,30 +192,25 @@ func TestCurrentSessionUserRejectsMissingSession(t *testing.T) {
 	}
 }
 
-func TestSignupCanUpgradeLegacyUserWithoutPassword(t *testing.T) {
+func TestSignupRejectsDuplicateUsername(t *testing.T) {
 	setupTestDB(t)
 
-	result, err := db().Exec(`INSERT INTO users (username) VALUES ('legacy')`)
+	passwordHash, err := hashPassword("verysecurepassword")
 	if err != nil {
-		t.Fatalf("insert legacy user: %v", err)
+		t.Fatalf("hash password: %v", err)
 	}
-	userID, _ := result.LastInsertId()
+
+	if _, err := db().Exec(`INSERT INTO users (username, password_hash) VALUES ('legacy', ?)`, passwordHash); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
 
 	recorder := executeJSONRequest(Signup, http.MethodPost, "/auth/signup", map[string]string{
 		"username": "legacy",
 		"password": "verysecurepassword",
 	})
 
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d", recorder.Code)
-	}
-
-	var passwordHash sql.NullString
-	if err := db().QueryRow(`SELECT password_hash FROM users WHERE id = ?`, userID).Scan(&passwordHash); err != nil {
-		t.Fatalf("select password hash: %v", err)
-	}
-	if !passwordHash.Valid || passwordHash.String == "" {
-		t.Fatalf("expected password hash to be set")
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", recorder.Code)
 	}
 }
 

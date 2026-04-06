@@ -32,6 +32,8 @@ The current refactor keeps the existing Go + SQLite backend and React + TypeScri
   Route-level pages for login, topic, post, and edit/create flows.
 - [frontend/src/components](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/components)
   Shared layout and feedback primitives.
+- [frontend/src/context](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/context)
+  Session-based auth state bootstrap and auth actions.
 - [frontend/src/services/api](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/services/api)
   Centralized API client and forum API methods.
 - [frontend/src/types](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/types)
@@ -43,7 +45,10 @@ The current refactor keeps the existing Go + SQLite backend and React + TypeScri
 
 Core endpoints preserved:
 
-- `POST /login`
+- `POST /auth/signup`
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
 - `GET /topics`
 - `POST /topics`
 - `GET /topics/:id`
@@ -69,11 +74,40 @@ Error responses use:
 { "error": { "message": "...", "code": "..." } }
 ```
 
-Authorization scaffolding is still lightweight, but mutations are now explicit:
+Protected mutations now authorize against the authenticated session user, not a client-supplied identity header.
 
-- Topic edit/delete requires `X-User-ID` to match `created_by`
-- Post edit/delete requires `X-User-ID` to match `created_by`
+- Topic create/edit/delete requires a valid session
+- Post create/edit/delete requires a valid session
+- Comment create requires a valid session
 - Comments remain create/read only in this app version
+
+## Auth Flow
+
+ArtHub uses bcrypt password hashing plus server-side cookie sessions.
+
+- `POST /auth/signup`
+  Creates a password-backed account and starts a session.
+- `POST /auth/login`
+  Verifies credentials and sets an `HttpOnly` session cookie.
+- `POST /auth/logout`
+  Deletes the active session and clears the cookie.
+- `GET /auth/me`
+  Returns the current authenticated user from the session cookie.
+
+Existing local databases may already contain users created before password auth existed. Those users can sign up again with the same username to attach a password, or you can delete the local SQLite file in `backend/data/` for a clean reset during development.
+
+## Frontend Auth Flow
+
+The React app now uses the backend session flow directly:
+
+- session bootstrap from `GET /auth/me` on app load
+- signup via `POST /auth/signup`
+- login via `POST /auth/login`
+- logout via `POST /auth/logout`
+- protected create/edit routes redirect to `/login` when unauthenticated
+- expired sessions clear local auth state and return the user to `/login` on protected flows
+
+The frontend no longer treats `localStorage` as the source of truth for identity, and it no longer sends `X-User-ID` for authorization.
 
 ## Local Setup
 
@@ -139,7 +173,9 @@ The frontend still uses Create React App on purpose. Migrating to Vite is reason
 
 ## Manual Smoke Test
 
-- Log in with a new username.
+- Sign up with a username and password.
+- Refresh the app and confirm the session is restored.
+- Log out and confirm protected pages redirect to `/login`.
 - Create a topic.
 - Edit the topic.
 - Create a post inside that topic.

@@ -2,14 +2,14 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
-import { useCurrentUser } from "../hooks/useCurrentUser";
+import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
 import type { Comment, Post } from "../types";
 
 const PostDetailPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
   const navigate = useNavigate();
-  const currentUser = useCurrentUser();
+  const { currentUser, isAuthenticated } = useAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -77,7 +77,6 @@ const PostDetailPage: React.FC = () => {
       setActionError(null);
       const comment = await forumApi.createComment(post.id, {
         body: newComment.trim(),
-        createdBy: currentUser.id,
       });
       setComments((current) => [...current, comment]);
       setNewComment("");
@@ -131,6 +130,9 @@ const PostDetailPage: React.FC = () => {
       }
     >
       {actionError ? <Notice tone="error">{actionError}</Notice> : null}
+      {!isAuthenticated ? (
+        <Notice tone="info">Log in to comment on this post.</Notice>
+      ) : null}
       {currentUser && !isOwner ? (
         <Notice tone="info">Only the post owner can edit or delete this post.</Notice>
       ) : null}
@@ -156,7 +158,7 @@ const PostDetailPage: React.FC = () => {
           </ul>
         )}
 
-        {currentUser ? (
+        {isAuthenticated ? (
           <form className="form-grid" onSubmit={handleAddComment}>
             <div className="field">
               <label htmlFor="comment">Add a comment</label>
@@ -176,9 +178,7 @@ const PostDetailPage: React.FC = () => {
               {submitting ? "Posting..." : "Post Comment"}
             </button>
           </form>
-        ) : (
-          <Notice tone="info">Log in to join the discussion.</Notice>
-        )}
+        ) : null}
       </div>
     </PageLayout>
   );

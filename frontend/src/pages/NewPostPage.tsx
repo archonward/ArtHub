@@ -2,13 +2,11 @@ import React, { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
-import { useCurrentUser } from "../hooks/useCurrentUser";
 import { forumApi } from "../services/api/forumApi";
 
 const NewPostPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const currentUser = useCurrentUser();
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -25,11 +23,6 @@ const NewPostPage: React.FC = () => {
       return;
     }
 
-    if (!currentUser) {
-      setError("You must be logged in to create a post.");
-      return;
-    }
-
     if (!title.trim() || !body.trim()) {
       setError("Title and body are required.");
       return;
@@ -42,7 +35,6 @@ const NewPostPage: React.FC = () => {
       await forumApi.createPost(topicId, {
         title: title.trim(),
         body: body.trim(),
-        createdBy: currentUser.id,
       });
       navigate(`/topics/${topicId}`);
     } catch (err) {
@@ -54,7 +46,6 @@ const NewPostPage: React.FC = () => {
 
   return (
     <PageLayout title="Create Post" subtitle="Add a new thread inside this topic.">
-      {!currentUser ? <Notice tone="info">Log in to create a post.</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <form className="form-grid" onSubmit={handleSubmit}>
@@ -64,7 +55,7 @@ const NewPostPage: React.FC = () => {
             id="title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            disabled={loading || !currentUser}
+            disabled={loading}
           />
         </div>
 
@@ -75,12 +66,12 @@ const NewPostPage: React.FC = () => {
             value={body}
             onChange={(event) => setBody(event.target.value)}
             rows={8}
-            disabled={loading || !currentUser}
+            disabled={loading}
           />
         </div>
 
         <div className="form-actions">
-          <button className="button button--primary" type="submit" disabled={loading || !currentUser}>
+          <button className="button button--primary" type="submit" disabled={loading}>
             {loading ? "Creating..." : "Create Post"}
           </button>
           <button

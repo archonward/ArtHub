@@ -2,14 +2,14 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
-import { useCurrentUser } from "../hooks/useCurrentUser";
+import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
 import type { Post, Topic } from "../types";
 
 const TopicDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const currentUser = useCurrentUser();
+  const { currentUser, isAuthenticated } = useAuth();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,12 +63,14 @@ const TopicDetailPage: React.FC = () => {
           <button className="button button--secondary" onClick={() => navigate("/topics")}>
             Back to Topics
           </button>
-          <button
-            className="button button--secondary"
-            onClick={() => navigate(`/topics/${topic.id}/posts/new`)}
-          >
-            New Post
-          </button>
+          {isAuthenticated ? (
+            <button
+              className="button button--secondary"
+              onClick={() => navigate(`/topics/${topic.id}/posts/new`)}
+            >
+              New Post
+            </button>
+          ) : null}
           {currentUser?.id === topic.createdBy ? (
             <button
               className="button button--ghost"
@@ -80,6 +82,9 @@ const TopicDetailPage: React.FC = () => {
         </div>
       }
     >
+      {!isAuthenticated ? (
+        <Notice tone="info">Log in if you want to create a post in this topic.</Notice>
+      ) : null}
       {currentUser && currentUser.id !== topic.createdBy ? (
         <Notice tone="info">Only the topic owner can edit this topic.</Notice>
       ) : null}

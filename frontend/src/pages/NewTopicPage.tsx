@@ -2,12 +2,10 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
-import { useCurrentUser } from "../hooks/useCurrentUser";
 import { forumApi } from "../services/api/forumApi";
 
 export default function NewTopicPage() {
   const navigate = useNavigate();
-  const currentUser = useCurrentUser();
   const [form, setForm] = useState({ title: "", description: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -15,11 +13,6 @@ export default function NewTopicPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
-
-    if (!currentUser) {
-      setError("You must be logged in.");
-      return;
-    }
 
     if (!form.title.trim()) {
       setError("Title is required.");
@@ -31,7 +24,6 @@ export default function NewTopicPage() {
       const topic = await forumApi.createTopic({
         title: form.title.trim(),
         description: form.description.trim(),
-        createdBy: currentUser.id,
       });
       navigate(`/topics/${topic.id}`);
     } catch (err) {
@@ -43,7 +35,6 @@ export default function NewTopicPage() {
 
   return (
     <PageLayout title="Create Topic" subtitle="Set up a discussion area for related posts.">
-      {!currentUser ? <Notice tone="info">Log in to create a topic.</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <form className="form-grid" onSubmit={handleSubmit}>
@@ -56,7 +47,7 @@ export default function NewTopicPage() {
             onChange={(event) =>
               setForm((current) => ({ ...current, title: event.target.value }))
             }
-            disabled={loading || !currentUser}
+            disabled={loading}
           />
         </div>
 
@@ -70,12 +61,12 @@ export default function NewTopicPage() {
               setForm((current) => ({ ...current, description: event.target.value }))
             }
             rows={5}
-            disabled={loading || !currentUser}
+            disabled={loading}
           />
         </div>
 
         <div className="form-actions">
-          <button className="button button--primary" type="submit" disabled={loading || !currentUser}>
+          <button className="button button--primary" type="submit" disabled={loading}>
             {loading ? "Creating..." : "Create Topic"}
           </button>
           <button

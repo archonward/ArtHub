@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
@@ -115,6 +116,78 @@ func CreateSchema(db *sql.DB) error {
 		return err
 	}
 
+	if err := ensureUserAuthColumns(db); err != nil {
+		return err
+	}
+
+	if err := ensureSessionsTable(db); err != nil {
+		return err
+	}
+
 	log.Println("Tables created, if they didn't exist")
 	return nil
+}
+
+func ensureUserAuthColumns(db *sql.DB) error {
+	columns, err := tableColumns(db, "users")
+	if err != nil {
+		return err
+	}
+
+	if !columns["password_hash"] {
+		if _, err := db.Exec(`ALTER TABLE users ADD COLUMN password_hash TEXT`); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ensureSessionsTable(db *sql.DB) error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS sessions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		token_hash TEXT NOT NULL UNIQUE,
+		expires_at DATETIME NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+	CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+	`
+
+	_, err := db.Exec(schema)
+	return err
+}
+
+func tableColumns(db *sql.DB, tableName string) (map[string]bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + tableName + `)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name string
+		var columnType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return nil, err
+		}
+		columns[strings.ToLower(name)] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return columns, nil
 }

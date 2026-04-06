@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"log"
 	"net/http"
 )
@@ -69,6 +68,13 @@ func GetCommentsByPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateComment(w http.ResponseWriter, r *http.Request) {
+	user, err := requireAuthenticatedUser(r)
+	if err != nil {
+		status, code, message := authError(err)
+		writeError(w, status, code, message)
+		return
+	}
+
 	postID, err := parsePathID(r, "id")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_post_id", "post id must be a positive integer")
@@ -101,24 +107,11 @@ func CreateComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "validation_error", "comment body is required")
 		return
 	}
-	if input.CreatedBy <= 0 {
-		writeError(w, http.StatusBadRequest, "validation_error", "created_by must be a positive integer")
-		return
-	}
-	if err := ensureUserExists(input.CreatedBy); err != nil {
-		if errors.Is(err, errUserNotFound) {
-			writeError(w, http.StatusBadRequest, "invalid_created_by", "created_by user does not exist")
-			return
-		}
-		log.Printf("CreateComment user lookup failed: %v", err)
-		writeError(w, http.StatusInternalServerError, "user_lookup_failed", "failed to verify user")
-		return
-	}
 
 	result, err := db().Exec(`
 		INSERT INTO comments (post_id, body, created_by)
 		VALUES (?, ?, ?)
-	`, postID, input.Body, input.CreatedBy)
+	`, postID, input.Body, user.ID)
 	if err != nil {
 		log.Printf("CreateComment insert failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "comment_create_failed", "failed to create comment")

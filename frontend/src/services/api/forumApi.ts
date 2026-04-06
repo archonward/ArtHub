@@ -19,10 +19,32 @@ import { mapComment, mapPost, mapTopic, mapUser } from "../../types";
 import { request } from "./client";
 
 export const forumApi = {
-  login: async (username: string): Promise<User> => {
-    const user = await request<UserDto>("/login", {
+  signup: async (username: string, password: string): Promise<User> => {
+    const user = await request<UserDto>("/auth/signup", {
       method: "POST",
-      body: { username },
+      body: { username, password },
+      notifyOnUnauthorized: false,
+    });
+    return mapUser(user);
+  },
+
+  login: async (username: string, password: string): Promise<User> => {
+    const user = await request<UserDto>("/auth/login", {
+      method: "POST",
+      body: { username, password },
+      notifyOnUnauthorized: false,
+    });
+    return mapUser(user);
+  },
+
+  logout: (): Promise<{ logged_out: boolean }> =>
+    request<{ logged_out: boolean }>("/auth/logout", {
+      method: "POST",
+    }),
+
+  getCurrentUser: async (): Promise<User> => {
+    const user = await request<UserDto>("/auth/me", {
+      notifyOnUnauthorized: false,
     });
     return mapUser(user);
   },
@@ -57,7 +79,6 @@ export const forumApi = {
       body: {
         title: input.title,
         description: input.description,
-        created_by: input.createdBy,
       },
     });
     return mapTopic(topic);
@@ -85,7 +106,6 @@ export const forumApi = {
       body: {
         title: input.title,
         body: input.body,
-        created_by: input.createdBy,
       },
     });
     return mapPost(post);
@@ -115,7 +135,6 @@ export const forumApi = {
       method: "POST",
       body: {
         body: input.body,
-        created_by: input.createdBy,
       },
     });
     return mapComment(comment);

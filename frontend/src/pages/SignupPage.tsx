@@ -4,21 +4,21 @@ import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
 import { useAuth } from "../context/AuthContext";
 
-type LoginLocationState = {
+type SignupLocationState = {
   from?: {
     pathname?: string;
   };
 };
 
-const LoginPage: React.FC = () => {
+const SignupPage: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, isBootstrapping, signup } = useAuth();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { authNotice, isAuthenticated, isBootstrapping, login } = useAuth();
 
   useEffect(() => {
     if (!isBootstrapping && isAuthenticated) {
@@ -28,7 +28,7 @@ const LoginPage: React.FC = () => {
 
   if (isBootstrapping) {
     return (
-      <PageLayout title="ArtHub" subtitle="Restoring your session..." narrow>
+      <PageLayout title="Create ArtHub Account" subtitle="Restoring your session..." narrow>
         <p className="empty-state">Loading session...</p>
       </PageLayout>
     );
@@ -36,7 +36,8 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (username.trim() === "") {
+
+    if (!username.trim()) {
       setError("Username is required.");
       return;
     }
@@ -49,11 +50,11 @@ const LoginPage: React.FC = () => {
     setError(null);
 
     try {
-      await login(username.trim(), password);
-      const redirectTo = (location.state as LoginLocationState | null)?.from?.pathname || "/topics";
+      await signup(username.trim(), password);
+      const redirectTo = (location.state as SignupLocationState | null)?.from?.pathname || "/topics";
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed.");
+      setError(err instanceof Error ? err.message : "Failed to sign up.");
     } finally {
       setLoading(false);
     }
@@ -61,11 +62,10 @@ const LoginPage: React.FC = () => {
 
   return (
     <PageLayout
-      title="ArtHub"
-      subtitle="Log in to manage your topics, posts, and comments."
+      title="Create ArtHub Account"
+      subtitle="Set up an account to create topics, posts, and comments."
       narrow
     >
-      {authNotice ? <Notice tone="info">{authNotice}</Notice> : null}
       {error ? <Notice tone="error">{error}</Notice> : null}
       <form className="form-grid" onSubmit={handleSubmit}>
         <div className="field">
@@ -88,20 +88,20 @@ const LoginPage: React.FC = () => {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             disabled={loading}
-            autoComplete="current-password"
+            autoComplete="new-password"
           />
         </div>
 
         <button className="button button--primary button--full" type="submit" disabled={loading}>
-          {loading ? "Logging in..." : "Log In"}
+          {loading ? "Creating account..." : "Sign Up"}
         </button>
       </form>
 
       <p className="meta">
-        Need an account? <Link to="/signup">Sign up</Link>.
+        Already have an account? <Link to="/login">Log in</Link>.
       </p>
     </PageLayout>
   );
 };
 
-export default LoginPage;
+export default SignupPage;

@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Notice from "../components/Notice";
 import PageLayout from "../components/PageLayout";
-import { useCurrentUser } from "../hooks/useCurrentUser";
+import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
 
 const EditTopicPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const currentUser = useCurrentUser();
+  const { currentUser } = useAuth();
   const topicId = Number(id);
 
   const [title, setTitle] = useState("");

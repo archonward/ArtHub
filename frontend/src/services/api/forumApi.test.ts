@@ -1,57 +1,54 @@
-import { CURRENT_USER_STORAGE_KEY } from "../../constants/storage";
 import { ApiError } from "./client";
 import { forumApi } from "./forumApi";
 
 describe("forumApi", () => {
   beforeEach(() => {
     global.fetch = jest.fn();
-    localStorage.clear();
   });
 
   afterEach(() => {
     jest.resetAllMocks();
   });
 
-  it("maps login responses from the API envelope", async () => {
+  it("maps login responses from the auth API envelope", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ data: { id: 7, username: "arthur" } }),
+      json: async () => ({ data: { id: 7, username: "arthur", created_at: "2026-04-06T00:00:00Z" } }),
     });
 
-    await expect(forumApi.login("arthur")).resolves.toEqual({
+    await expect(forumApi.login("arthur", "secret123")).resolves.toEqual({
       id: 7,
       username: "arthur",
     });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8080/login",
+      "http://localhost:8080/auth/login",
       expect.objectContaining({
         method: "POST",
+        credentials: "include",
       }),
     );
   });
 
-  it("attaches X-User-ID for mutations when a current user exists", async () => {
-    localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify({ id: 13, username: "owner" }));
+  it("uses the session bootstrap endpoint", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ data: { deleted: true } }),
+      json: async () => ({ data: { id: 3, username: "owner", created_at: "2026-04-06T00:00:00Z" } }),
     });
 
-    await forumApi.deletePost(9);
+    await expect(forumApi.getCurrentUser()).resolves.toEqual({
+      id: 3,
+      username: "owner",
+    });
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "http://localhost:8080/posts/9",
+      "http://localhost:8080/auth/me",
       expect.objectContaining({
-        method: "DELETE",
-        headers: expect.any(Headers),
+        credentials: "include",
       }),
     );
-
-    const [, options] = (global.fetch as jest.Mock).mock.calls[0];
-    expect((options.headers as Headers).get("X-User-ID")).toBe("13");
   });
 
   it("surfaces structured JSON API errors", async () => {

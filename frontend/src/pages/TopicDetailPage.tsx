@@ -5,7 +5,9 @@ import PageLayout from "../components/PageLayout";
 import PostVoteControls from "../components/PostVoteControls";
 import { useAuth } from "../context/AuthContext";
 import { forumApi } from "../services/api/forumApi";
-import type { Post, Topic } from "../types";
+import type { Pagination, Post, PostSort, Topic } from "../types";
+
+const TOPIC_POSTS_PAGE_SIZE = 10;
 
 const TopicDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +15,9 @@ const TopicDetailPage: React.FC = () => {
   const { currentUser, isAuthenticated } = useAuth();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [sort, setSort] = useState<PostSort>("top");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,10 +38,19 @@ const TopicDetailPage: React.FC = () => {
     }
 
     const fetchTopic = async () => {
+      setLoading(true);
+      setError(null);
+
       try {
-        const details = await forumApi.getTopicDetails(topicId);
+        const details = await forumApi.getTopicDetails(
+          topicId,
+          sort,
+          page,
+          TOPIC_POSTS_PAGE_SIZE,
+        );
         setTopic(details.topic);
         setPosts(details.posts);
+        setPagination(details.pagination);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load topic.");
       } finally {
@@ -45,7 +59,7 @@ const TopicDetailPage: React.FC = () => {
     };
 
     void fetchTopic();
-  }, [id]);
+  }, [id, sort, page]);
 
   if (loading) {
     return (
@@ -108,7 +122,23 @@ const TopicDetailPage: React.FC = () => {
       </p>
 
       <div className="stack">
-        <h2 className="section-title">Posts ({posts.length})</h2>
+        <div className="section-header">
+          <h2 className="section-title">Posts ({posts.length})</h2>
+          <label className="sort-control" htmlFor="post-sort">
+            <span>Sort</span>
+            <select
+              id="post-sort"
+              value={sort}
+              onChange={(event) => {
+                setSort(event.target.value as PostSort);
+                setPage(1);
+              }}
+            >
+              <option value="top">Top</option>
+              <option value="new">New</option>
+            </select>
+          </label>
+        </div>
 
         {posts.length === 0 ? (
           <p className="empty-state">
@@ -139,6 +169,38 @@ const TopicDetailPage: React.FC = () => {
             ))}
           </ul>
         )}
+
+        {pagination && pagination.totalPages > 0 ? (
+          <div className="pagination">
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={!pagination.hasPrev}
+              onClick={() =>
+                setPage((currentPage) => Math.max(1, currentPage - 1))
+              }
+            >
+              Previous
+            </button>
+            <p className="meta pagination__label">
+              Page {pagination.page} of {pagination.totalPages}
+            </p>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={!pagination.hasNext}
+              onClick={() =>
+                setPage((currentPage) =>
+                  pagination.totalPages > 0
+                    ? Math.min(pagination.totalPages, currentPage + 1)
+                    : currentPage,
+                )
+              }
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       </div>
     </PageLayout>
   );

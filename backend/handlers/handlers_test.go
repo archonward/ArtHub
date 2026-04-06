@@ -559,3 +559,262 @@ func TestDeletePostVoteRemovesCurrentUsersVote(t *testing.T) {
 		t.Fatalf("expected current_user_vote to be nil, got %+v", post)
 	}
 }
+
+func TestGetPostsByTopicSortsByTop(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voterA, _ := signupAndSessionCookie(t, "voterA")
+	voterB, _ := signupAndSessionCookie(t, "voterB")
+
+	insertTopicAndPostsForSorting(t, owner.ID)
+
+	if _, err := db().Exec(`INSERT INTO votes (user_id, post_id, vote_value) VALUES (?, 1, 1), (?, 1, 1), (?, 2, 1)`, voterA.ID, voterB.ID, voterA.ID); err != nil {
+		t.Fatalf("insert votes: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=top", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	page := decodeSuccessEnvelope[TopicPostsPage](t, recorder)
+	posts := page.Posts
+	if len(posts) != 3 {
+		t.Fatalf("expected 3 posts, got %d", len(posts))
+	}
+	if posts[0].ID != 1 || posts[1].ID != 2 || posts[2].ID != 3 {
+		t.Fatalf("unexpected order: %+v", posts)
+	}
+	if page.Pagination.Page != 1 || page.Pagination.PageSize != defaultPostPageSize || page.Pagination.TotalItems != 3 {
+		t.Fatalf("unexpected pagination: %+v", page.Pagination)
+	}
+}
+
+func TestGetPostsByTopicSortsByNew(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+
+	insertTopicAndPostsForSorting(t, owner.ID)
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=new", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	posts := decodeSuccessEnvelope[TopicPostsPage](t, recorder).Posts
+	if len(posts) != 3 {
+		t.Fatalf("expected 3 posts, got %d", len(posts))
+	}
+	if posts[0].ID != 3 || posts[1].ID != 2 || posts[2].ID != 1 {
+		t.Fatalf("unexpected order: %+v", posts)
+	}
+}
+
+func TestGetPostsByTopicTopSortUsesDeterministicTieBreakers(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voter, _ := signupAndSessionCookie(t, "voter")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by, created_at)
+		VALUES
+			(1, 'Post A', 'Body A', ?, '2026-04-06 10:00:00'),
+			(1, 'Post B', 'Body B', ?, '2026-04-06 10:00:00')
+	`, owner.ID, owner.ID); err != nil {
+		t.Fatalf("insert posts: %v", err)
+	}
+
+	if _, err := db().Exec(`INSERT INTO votes (user_id, post_id, vote_value) VALUES (?, 1, 1), (?, 2, 1)`, voter.ID, owner.ID); err != nil {
+		t.Fatalf("insert votes: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=top", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	posts := decodeSuccessEnvelope[TopicPostsPage](t, recorder).Posts
+	if posts[0].ID != 2 || posts[1].ID != 1 {
+		t.Fatalf("expected id DESC tie-break, got %+v", posts)
+	}
+}
+
+func TestGetPostsByTopicRejectsInvalidSort(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=hot", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
+	}
+
+	errEnvelope := decodeErrorEnvelope(t, recorder)
+	if errEnvelope.Error.Code != "invalid_sort" {
+		t.Fatalf("unexpected error: %+v", errEnvelope)
+	}
+}
+
+func TestGetPostsByTopicPaginatesResultsAcrossPages(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+
+	insertTopicAndPostsForSorting(t, owner.ID)
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=new&page=2&pageSize=1", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	page := decodeSuccessEnvelope[TopicPostsPage](t, recorder)
+	if len(page.Posts) != 1 || page.Posts[0].ID != 2 {
+		t.Fatalf("unexpected page posts: %+v", page.Posts)
+	}
+	if page.Pagination.Page != 2 || page.Pagination.PageSize != 1 || page.Pagination.TotalItems != 3 || page.Pagination.TotalPages != 3 {
+		t.Fatalf("unexpected pagination: %+v", page.Pagination)
+	}
+	if !page.Pagination.HasPrev || !page.Pagination.HasNext {
+		t.Fatalf("expected prev and next to be true: %+v", page.Pagination)
+	}
+}
+
+func TestGetPostsByTopicPaginationPreservesSortMode(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+	voterA, _ := signupAndSessionCookie(t, "voterA")
+	voterB, _ := signupAndSessionCookie(t, "voterB")
+
+	insertTopicAndPostsForSorting(t, owner.ID)
+
+	if _, err := db().Exec(`INSERT INTO votes (user_id, post_id, vote_value) VALUES (?, 1, 1), (?, 1, 1), (?, 2, 1)`, voterA.ID, voterB.ID, voterA.ID); err != nil {
+		t.Fatalf("insert votes: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?sort=top&page=2&pageSize=1", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", recorder.Code)
+	}
+
+	page := decodeSuccessEnvelope[TopicPostsPage](t, recorder)
+	if len(page.Posts) != 1 || page.Posts[0].ID != 2 {
+		t.Fatalf("unexpected paginated top sort result: %+v", page.Posts)
+	}
+}
+
+func TestGetPostsByTopicRejectsInvalidPage(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?page=0", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
+	}
+
+	errEnvelope := decodeErrorEnvelope(t, recorder)
+	if errEnvelope.Error.Code != "invalid_pagination" {
+		t.Fatalf("unexpected error: %+v", errEnvelope)
+	}
+}
+
+func TestGetPostsByTopicRejectsInvalidPageSize(t *testing.T) {
+	setupTestDB(t)
+	owner, _ := signupAndSessionCookie(t, "owner")
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, owner.ID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/topics/1/posts?pageSize=100", nil)
+	req.SetPathValue("id", "1")
+	recorder := httptest.NewRecorder()
+
+	GetPostsByTopic(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
+	}
+
+	errEnvelope := decodeErrorEnvelope(t, recorder)
+	if errEnvelope.Error.Code != "invalid_pagination" {
+		t.Fatalf("unexpected error: %+v", errEnvelope)
+	}
+}
+
+func insertTopicAndPostsForSorting(t *testing.T, ownerID int) {
+	t.Helper()
+
+	if _, err := db().Exec(`
+		INSERT INTO topics (title, description, created_by)
+		VALUES ('Markets', 'Research discussion', ?)
+	`, ownerID); err != nil {
+		t.Fatalf("insert topic: %v", err)
+	}
+
+	if _, err := db().Exec(`
+		INSERT INTO posts (topic_id, title, body, created_by, created_at)
+		VALUES
+			(1, 'Oldest', 'Body 1', ?, '2026-04-06 08:00:00'),
+			(1, 'Middle', 'Body 2', ?, '2026-04-06 09:00:00'),
+			(1, 'Newest', 'Body 3', ?, '2026-04-06 10:00:00')
+	`, ownerID, ownerID, ownerID); err != nil {
+		t.Fatalf("insert posts: %v", err)
+	}
+}

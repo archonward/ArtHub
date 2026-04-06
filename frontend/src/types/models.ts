@@ -33,4 +33,16 @@ export interface Comment {
 export interface TopicDetails {
   topic: Topic;
   posts: Post[];
+  pagination: Pagination;
+}
+
+export type PostSort = "top" | "new";
+
+export interface Pagination {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasPrev: boolean;
+  hasNext: boolean;
 }

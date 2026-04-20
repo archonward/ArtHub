@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import PostVoteControls from "../components/PostVoteControls.vue";
@@ -22,6 +23,8 @@ const error = ref("");
 const submitting = ref(false);
 const deleting = ref(false);
 const actionError = ref("");
+const dialogOpen = ref(false);
+const pendingDelete = ref(false);
 
 const isOwner = computed(() => auth.state.currentUser?.id === post.value?.createdBy);
 
@@ -46,8 +49,18 @@ onMounted(async () => {
   }
 });
 
-const handleDelete = async () => {
-  if (!post.value || !window.confirm("Delete this post and all its comments?")) {
+const openDeleteDialog = () => {
+  pendingDelete.value = true;
+  dialogOpen.value = true;
+};
+
+const closeDeleteDialog = () => {
+  dialogOpen.value = false;
+  pendingDelete.value = false;
+};
+
+const confirmDelete = async () => {
+  if (!post.value || !pendingDelete.value) {
     return;
   }
 
@@ -55,6 +68,7 @@ const handleDelete = async () => {
     actionError.value = "";
     deleting.value = true;
     await forumApi.deletePost(post.value.id);
+    closeDeleteDialog();
     await router.push(`/companies/${post.value.companyId}`);
   } catch (err) {
     actionError.value = err instanceof Error ? err.message : "Failed to delete post.";
@@ -110,7 +124,7 @@ const updatePost = (updatedPost: Post) => {
           v-if="isOwner"
           class="button button--danger"
           :disabled="deleting"
-          @click="handleDelete"
+          @click="openDeleteDialog"
         >
           {{ deleting ? "Deleting..." : "Delete" }}
         </button>
@@ -157,6 +171,15 @@ const updatePost = (updatedPost: Post) => {
         </button>
       </form>
     </div>
+
+    <ConfirmDialog
+      :open="dialogOpen"
+      title="Delete Post"
+      message="Delete this post and all its comments?"
+      confirm-label="Delete Post"
+      @cancel="closeDeleteDialog"
+      @confirm="confirmDelete"
+    />
   </PageLayout>
 
   <PageLayout v-else-if="loading" title="Post" subtitle="Loading post details...">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import { useAuth } from "../composables/useAuth";
@@ -15,7 +16,8 @@ const loading = ref(true);
 const error = ref("");
 const actionError = ref("");
 const deletingCompanyId = ref<number | null>(null);
-const loggingOut = ref(false);
+const dialogOpen = ref(false);
+const pendingCompanyId = ref<number | null>(null);
 
 const currentUserId = computed(() => auth.state.currentUser?.id ?? null);
 
@@ -30,35 +32,34 @@ const loadCompanies = async () => {
   }
 };
 
-const handleDelete = async (companyId: number) => {
-  if (!window.confirm("Delete this company? This also removes its posts and comments.")) {
+const openDeleteDialog = (companyId: number) => {
+  pendingCompanyId.value = companyId;
+  dialogOpen.value = true;
+};
+
+const closeDeleteDialog = () => {
+  dialogOpen.value = false;
+  pendingCompanyId.value = null;
+};
+
+const confirmDelete = async () => {
+  if (!pendingCompanyId.value) {
     return;
   }
 
   try {
     actionError.value = "";
-    deletingCompanyId.value = companyId;
-    await forumApi.deleteCompany(companyId);
-    companies.value = companies.value.filter((company) => company.id !== companyId);
+    deletingCompanyId.value = pendingCompanyId.value;
+    await forumApi.deleteCompany(pendingCompanyId.value);
+    companies.value = companies.value.filter(
+      (company) => company.id !== pendingCompanyId.value,
+    );
+    closeDeleteDialog();
   } catch (err) {
     actionError.value =
       err instanceof Error ? err.message : "Failed to delete company.";
   } finally {
     deletingCompanyId.value = null;
-  }
-};
-
-const handleLogout = async () => {
-  try {
-    loggingOut.value = true;
-    actionError.value = "";
-    await auth.logout();
-    await router.push("/login");
-  } catch (err) {
-    actionError.value =
-      err instanceof Error ? err.message : "Failed to log out.";
-  } finally {
-    loggingOut.value = false;
   }
 };
 
@@ -78,21 +79,6 @@ onMounted(loadCompanies);
           @click="router.push('/companies/new')"
         >
           New Company
-        </button>
-        <button
-          v-if="!auth.state.isBootstrapping && auth.isAuthenticated.value"
-          class="button button--ghost"
-          :disabled="loggingOut"
-          @click="handleLogout"
-        >
-          {{ loggingOut ? "Logging out..." : "Log Out" }}
-        </button>
-        <button
-          v-else-if="!auth.state.isBootstrapping"
-          class="button button--secondary"
-          @click="router.push('/login')"
-        >
-          Log In
         </button>
       </div>
     </template>
@@ -128,12 +114,21 @@ onMounted(loadCompanies);
             v-if="currentUserId === company.createdBy"
             class="button button--danger"
             :disabled="deletingCompanyId === company.id"
-            @click.stop="handleDelete(company.id)"
+            @click.stop="openDeleteDialog(company.id)"
           >
             {{ deletingCompanyId === company.id ? "Deleting..." : "Delete" }}
           </button>
         </div>
       </li>
     </ul>
+
+    <ConfirmDialog
+      :open="dialogOpen"
+      title="Delete Company"
+      message="Delete this company? This also removes its posts and comments."
+      confirm-label="Delete Company"
+      @cancel="closeDeleteDialog"
+      @confirm="confirmDelete"
+    />
   </PageLayout>
 </template>

@@ -104,11 +104,7 @@ export const forumApi = {
   createCompany: async (input: CreateCompanyInput): Promise<Company> => {
     const company = await request<CompanyDto>("/companies", {
       method: "POST",
-      body: {
-        ticker: input.ticker,
-        name: input.name,
-        description: input.description,
-      },
+      body: input,
     });
     return mapCompany(company);
   },
@@ -140,10 +136,7 @@ export const forumApi = {
   ): Promise<Post> => {
     const post = await request<PostDto>(`/companies/${companyId}/posts`, {
       method: "POST",
-      body: {
-        title: input.title,
-        body: input.body,
-      },
+      body: input,
     });
     return mapPost(post);
   },
@@ -187,9 +180,7 @@ export const forumApi = {
   ): Promise<Comment> => {
     const comment = await request<CommentDto>(`/posts/${postId}/comments`, {
       method: "POST",
-      body: {
-        body: input.body,
-      },
+      body: input,
     });
     return mapComment(comment);
   },

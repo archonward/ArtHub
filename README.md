@@ -11,9 +11,9 @@ Each discussion stream is anchored to a company record with a unique ticker. Use
 ## Stack
 
 - Backend: Go, `net/http`, SQLite
-- Frontend: React, TypeScript, Create React App
-- Routing: `react-router-dom`
-- Testing: Go `testing`, React Testing Library, Jest
+- Frontend: Vue 3, TypeScript, Vite
+- Routing: `vue-router`
+- Testing: Go `testing`
 
 ## Architecture
 
@@ -32,11 +32,13 @@ Each discussion stream is anchored to a company record with a unique ticker. Use
 
 - [frontend/src/pages](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/pages)
   Route-level pages for company browsing, company detail, post detail, and create/edit flows.
+- [frontend/src/router](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/router)
+  Vue Router configuration and auth-aware navigation guards.
 - [frontend/src/services/api](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/services/api)
   API client and domain-specific request helpers.
 - [frontend/src/types](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/types)
   DTO and app domain types.
-- [frontend/src/context](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/context)
+- [frontend/src/composables](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/composables)
   Session bootstrap and auth state.
 
 ## API Overview
@@ -116,12 +118,12 @@ Optional environment variables:
 cd frontend
 npm install
 cp .env.example .env
-npm start
+npm run dev
 ```
 
 Default frontend host: `http://localhost:3000`
 
-The frontend uses `REACT_APP_API_BASE_URL` and falls back to `http://localhost:8080`.
+The frontend uses `VITE_API_BASE_URL` and falls back to `http://localhost:8080`.
 
 ## Tests
 
@@ -136,7 +138,6 @@ go test ./...
 
 ```bash
 cd frontend
-npm test -- --watchAll=false
 npm run build
 ```
 

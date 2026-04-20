@@ -31,14 +31,6 @@ export interface Comment {
   createdAt: string;
 }
 
-export interface CompanyDetails {
-  company: Company;
-  posts: Post[];
-  pagination: Pagination;
-}
-
-export type PostSort = "top" | "new";
-
 export interface Pagination {
   page: number;
   pageSize: number;
@@ -47,3 +39,11 @@ export interface Pagination {
   hasPrev: boolean;
   hasNext: boolean;
 }
+
+export interface CompanyDetails {
+  company: Company;
+  posts: Post[];
+  pagination: Pagination;
+}
+
+export type PostSort = "top" | "new";

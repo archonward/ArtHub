@@ -6,6 +6,7 @@ import EditPostPage from "../pages/EditPostPage.vue";
 import LoginPage from "../pages/LoginPage.vue";
 import NewCompanyPage from "../pages/NewCompanyPage.vue";
 import NewPostPage from "../pages/NewPostPage.vue";
+import NotFoundPage from "../pages/NotFoundPage.vue";
 import PostDetailPage from "../pages/PostDetailPage.vue";
 import RootRedirectPage from "../pages/RootRedirectPage.vue";
 import SignupPage from "../pages/SignupPage.vue";
@@ -36,6 +37,7 @@ const router = createRouter({
       component: EditPostPage,
       meta: { requiresAuth: true },
     },
+    { path: "/:pathMatch(.*)*", component: NotFoundPage },
   ],
 });
 

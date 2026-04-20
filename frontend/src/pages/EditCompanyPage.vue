@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, watch, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import { useAuth } from "../composables/useAuth";
+import { useCompany } from "../composables/useCompany";
 import { forumApi } from "../services/api/forumApi";
 
 const route = useRoute();
@@ -15,34 +16,29 @@ const companyId = Number(route.params.id);
 const ticker = ref("");
 const name = ref("");
 const description = ref("");
-const loading = ref(true);
 const submitting = ref(false);
-const error = ref("");
 const ownerId = ref<number | null>(null);
+const { company, loading, error } = useCompany(companyId);
 
 const isOwner = computed(
   () => ownerId.value !== null && auth.state.currentUser?.id === ownerId.value,
 );
 
-onMounted(async () => {
-  if (!companyId) {
-    error.value = "Invalid company ID.";
-    loading.value = false;
-    return;
-  }
+watch(
+  company,
+  (currentCompany) => {
+    if (!currentCompany) {
+      ownerId.value = null;
+      return;
+    }
 
-  try {
-    const company = await forumApi.getCompany(companyId);
-    ticker.value = company.ticker;
-    name.value = company.name;
-    description.value = company.description;
-    ownerId.value = company.createdBy;
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : "Failed to load company.";
-  } finally {
-    loading.value = false;
-  }
-});
+    ticker.value = currentCompany.ticker;
+    name.value = currentCompany.name;
+    description.value = currentCompany.description;
+    ownerId.value = currentCompany.createdBy;
+  },
+  { immediate: true },
+);
 
 const handleSubmit = async () => {
   if (!companyId || !ticker.value.trim() || !name.value.trim()) {

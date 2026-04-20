@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import PostVoteControls from "../components/PostVoteControls.vue";
+import SkeletonList from "../components/SkeletonList.vue";
 import { useAuth } from "../composables/useAuth";
 import { forumApi } from "../services/api/forumApi";
 import type { Company, Pagination, Post, PostSort } from "../types";
@@ -159,7 +160,7 @@ watch([companyId, sort, page], fetchCompany, { immediate: true });
   </PageLayout>
 
   <PageLayout v-else-if="loading" title="Company" subtitle="Loading company discussion...">
-    <p class="empty-state">Loading company...</p>
+    <SkeletonList />
   </PageLayout>
 
   <PageLayout v-else title="Company" subtitle="Discussion area unavailable.">

@@ -154,6 +154,11 @@ export const forumApi = {
       () => undefined,
     ),
 
+  deleteComment: (postId: number, commentId: number): Promise<void> =>
+    request<DeleteResultDto>(`/posts/${postId}/comments/${commentId}`, {
+      method: "DELETE",
+    }).then(() => undefined),
+
   voteOnPost: async (id: number, input: VoteInput): Promise<Post> => {
     const post = await request<PostDto>(`/posts/${id}/vote`, {
       method: "POST",

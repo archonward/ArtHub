@@ -5,11 +5,13 @@ import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import { useAuth } from "../composables/useAuth";
 import { useCompany } from "../composables/useCompany";
+import { useToast } from "../composables/useToast";
 import { forumApi } from "../services/api/forumApi";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
+const { showToast } = useToast();
 
 const companyId = Number(route.params.id);
 
@@ -54,6 +56,7 @@ const handleSubmit = async () => {
       name: name.value.trim(),
       description: description.value.trim(),
     });
+    showToast("Changes saved", "success");
     await router.push(`/companies/${companyId}`);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to update company.";

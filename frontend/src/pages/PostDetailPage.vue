@@ -5,15 +5,19 @@ import ConfirmDialog from "../components/ConfirmDialog.vue";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import PostVoteControls from "../components/PostVoteControls.vue";
+import SkeletonList from "../components/SkeletonList.vue";
 import { useAuth } from "../composables/useAuth";
+import { useToast } from "../composables/useToast";
 import { forumApi } from "../services/api/forumApi";
 import type { Comment, Post } from "../types";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
+const { showToast } = useToast();
 
 const parsedPostId = computed(() => Number(route.params.postId));
+const currentUserId = computed(() => auth.state.currentUser?.id ?? null);
 
 const post = ref<Post | null>(null);
 const comments = ref<Comment[]>([]);
@@ -25,6 +29,9 @@ const deleting = ref(false);
 const actionError = ref("");
 const dialogOpen = ref(false);
 const pendingDelete = ref(false);
+const commentDeleteDialogOpen = ref(false);
+const pendingCommentId = ref<number | null>(null);
+const commentDeleteError = ref("");
 
 const isOwner = computed(() => auth.state.currentUser?.id === post.value?.createdBy);
 
@@ -77,6 +84,35 @@ const confirmDelete = async () => {
   }
 };
 
+const openCommentDeleteDialog = (commentId: number) => {
+  pendingCommentId.value = commentId;
+  commentDeleteDialogOpen.value = true;
+};
+
+const closeCommentDeleteDialog = () => {
+  commentDeleteDialogOpen.value = false;
+  pendingCommentId.value = null;
+};
+
+const confirmCommentDelete = async () => {
+  if (!post.value || !pendingCommentId.value) {
+    return;
+  }
+
+  try {
+    commentDeleteError.value = "";
+    await forumApi.deleteComment(post.value.id, pendingCommentId.value);
+    comments.value = comments.value.filter(
+      (comment) => comment.id !== pendingCommentId.value,
+    );
+    closeCommentDeleteDialog();
+    showToast("Comment deleted", "success");
+  } catch (err) {
+    commentDeleteError.value =
+      err instanceof Error ? err.message : "Failed to delete comment.";
+  }
+};
+
 const handleAddComment = async () => {
   if (!post.value || !auth.state.currentUser || !newComment.value.trim()) {
     return;
@@ -91,6 +127,7 @@ const handleAddComment = async () => {
     });
     comments.value = [...comments.value, comment];
     newComment.value = "";
+    showToast("Comment posted", "success");
   } catch (err) {
     actionError.value = err instanceof Error ? err.message : "Failed to post comment.";
   } finally {
@@ -146,14 +183,29 @@ const updatePost = (updatedPost: Post) => {
 
     <div class="stack">
       <h2 class="section-title">Comments ({{ comments.length }})</h2>
+      <NoticeBanner v-if="commentDeleteError" tone="error">
+        {{ commentDeleteError }}
+      </NoticeBanner>
 
       <p v-if="comments.length === 0" class="empty-state">No comments yet.</p>
       <ul v-else class="list">
         <li v-for="comment in comments" :key="comment.id" class="list-item">
-          <p class="content-body">{{ comment.body }}</p>
-          <p class="meta">
-            By user {{ comment.createdBy }} on {{ new Date(comment.createdAt).toLocaleString() }}
-          </p>
+          <div class="action-row action-row--spread">
+            <div>
+              <p class="content-body">{{ comment.body }}</p>
+              <p class="meta">
+                By user {{ comment.createdBy }} on {{ new Date(comment.createdAt).toLocaleString() }}
+              </p>
+            </div>
+            <button
+              v-if="comment.createdBy === currentUserId"
+              class="button button--danger"
+              type="button"
+              @click="openCommentDeleteDialog(comment.id)"
+            >
+              Delete
+            </button>
+          </div>
         </li>
       </ul>
 
@@ -180,10 +232,18 @@ const updatePost = (updatedPost: Post) => {
       @cancel="closeDeleteDialog"
       @confirm="confirmDelete"
     />
+    <ConfirmDialog
+      :open="commentDeleteDialogOpen"
+      title="Delete Comment"
+      message="Delete this comment?"
+      confirm-label="Delete Comment"
+      @cancel="closeCommentDeleteDialog"
+      @confirm="confirmCommentDelete"
+    />
   </PageLayout>
 
   <PageLayout v-else-if="loading" title="Post" subtitle="Loading post details...">
-    <p class="empty-state">Loading post...</p>
+    <SkeletonList />
   </PageLayout>
 
   <PageLayout v-else title="Post" subtitle="Discussion unavailable.">

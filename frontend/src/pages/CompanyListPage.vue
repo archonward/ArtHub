@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
+import SkeletonList from "../components/SkeletonList.vue";
 import { useAuth } from "../composables/useAuth";
 import { forumApi } from "../services/api/forumApi";
 import type { Company } from "../types";
@@ -88,7 +89,7 @@ onMounted(loadCompanies);
     </NoticeBanner>
     <NoticeBanner v-if="error" tone="error">{{ error }}</NoticeBanner>
     <NoticeBanner v-if="actionError" tone="error">{{ actionError }}</NoticeBanner>
-    <p v-if="loading" class="empty-state">Loading companies...</p>
+    <SkeletonList v-if="loading" />
     <p v-else-if="companies.length === 0" class="empty-state">
       No companies yet. Add the first ticker to get started.
     </p>

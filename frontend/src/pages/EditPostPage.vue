@@ -4,11 +4,13 @@ import { useRoute, useRouter } from "vue-router";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
 import { useAuth } from "../composables/useAuth";
+import { useToast } from "../composables/useToast";
 import { forumApi } from "../services/api/forumApi";
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuth();
+const { showToast } = useToast();
 
 const parsedPostId = Number(route.params.postId);
 
@@ -55,6 +57,7 @@ const handleSubmit = async () => {
       title: title.value.trim(),
       body: body.value.trim(),
     });
+    showToast("Changes saved", "success");
     await router.push(`/posts/${parsedPostId}`);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to update post.";

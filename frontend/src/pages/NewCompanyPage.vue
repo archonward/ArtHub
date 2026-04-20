@@ -3,9 +3,11 @@ import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
+import { useToast } from "../composables/useToast";
 import { forumApi } from "../services/api/forumApi";
 
 const router = useRouter();
+const { showToast } = useToast();
 
 const form = reactive({
   ticker: "",
@@ -37,6 +39,7 @@ const handleSubmit = async () => {
       name: form.name.trim(),
       description: form.description.trim(),
     });
+    showToast("Company created", "success");
     await router.push(`/companies/${company.id}`);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to create company.";

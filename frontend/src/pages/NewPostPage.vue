@@ -3,10 +3,12 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import NoticeBanner from "../components/NoticeBanner.vue";
 import PageLayout from "../components/PageLayout.vue";
+import { useToast } from "../composables/useToast";
 import { forumApi } from "../services/api/forumApi";
 
 const route = useRoute();
 const router = useRouter();
+const { showToast } = useToast();
 
 const companyId = computed(() => Number(route.params.id));
 
@@ -34,6 +36,7 @@ const handleSubmit = async () => {
       title: title.value.trim(),
       body: body.value.trim(),
     });
+    showToast("Post created", "success");
     await router.push(`/companies/${companyId.value}`);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to create post.";

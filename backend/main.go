@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
-	"github.com/archonward/CampusCommons/backend/database"
-	"github.com/archonward/CampusCommons/backend/server"
+	"github.com/archonward/ArtHub/backend/database"
+	"github.com/archonward/ArtHub/backend/server"
 )
 
 func main() {
@@ -14,7 +15,12 @@ func main() {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
-	port := ":8080"
-	fmt.Printf("Server starting on http://localhost%s\n", port)
-	log.Fatal(http.ListenAndServe(port, server.NewHandler()))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	addr := ":" + port
+	fmt.Printf("Server starting on http://localhost%s\n", addr)
+	log.Fatal(http.ListenAndServe(addr, server.NewHandler()))
 }

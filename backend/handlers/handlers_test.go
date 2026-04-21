@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/archonward/CampusCommons/backend/database"
+	"github.com/archonward/ArtHub/backend/database"
 	_ "github.com/mattn/go-sqlite3"
 )
 

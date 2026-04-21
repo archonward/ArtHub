@@ -1,4 +1,4 @@
-module github.com/archonward/CampusCommons/backend
+module github.com/archonward/ArtHub/backend
 
 go 1.25.5
 

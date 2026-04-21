@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/archonward/CampusCommons/backend/handlers"
+	"github.com/archonward/ArtHub/backend/handlers"
 	"github.com/rs/cors"
 )
 

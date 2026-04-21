@@ -26,3 +26,4 @@ Thumbs.db
 
 #SQLite db files
 /backend/data/*.db
+backend/data/

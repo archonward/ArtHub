@@ -3,7 +3,7 @@ package handlers
 import (
 	"database/sql"
 
-	"github.com/archonward/CampusCommons/backend/database"
+	"github.com/archonward/ArtHub/backend/database"
 )
 
 func db() *sql.DB {

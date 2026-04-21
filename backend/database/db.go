@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
@@ -12,14 +13,18 @@ import (
 var DB *sql.DB
 
 func InitDB() error {
-	const dataDir = "data"
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "data/campuscommons.db"
+	}
+
+	dataDir := filepath.Dir(dbPath)
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 		if err := os.Mkdir(dataDir, 0o755); err != nil {
 			return err
 		}
 	}
 
-	dbPath := "data/campuscommons.db"
 	var err error
 	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {

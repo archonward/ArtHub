@@ -12,8 +12,7 @@ services:
         value: /var/data/arthub.db
       - key: CAMPUSCOMMONS_ALLOWED_ORIGIN
         sync: false
-
-disks:
-  - name: arthub-db
-    mountPath: /var/data
-    sizeGB: 1
+    disks:
+      - name: arthub-db
+        mountPath: /var/data
+        sizeGB: 1

@@ -8,11 +8,5 @@ services:
     envVars:
       - key: PORT
         value: 8080
-      - key: DB_PATH
-        value: /var/data/arthub.db
       - key: CAMPUSCOMMONS_ALLOWED_ORIGIN
         sync: false
-    disks:
-      - name: arthub-db
-        mountPath: /var/data
-        sizeGB: 1

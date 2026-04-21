@@ -36,7 +36,7 @@ describe("request", () => {
       text: vi.fn().mockResolvedValue(""),
     });
 
-    await expect(request("/missing")).rejects.toMatchObject<ApiError>({
+    await expect(request("/missing")).rejects.toMatchObject({
       name: "ApiError",
       message: "Not found.",
       status: 404,

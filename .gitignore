@@ -8,6 +8,9 @@ yarn-error.log*
 .DS_Store
 build/
 dist/
+frontend/.env
+frontend/.env.production.local
+frontend/.env.local
 
 # Go
 /bin/

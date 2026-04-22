@@ -9,9 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
-	"os"
 	"regexp"
-	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -121,19 +119,14 @@ func createSession(userID int) (string, authSession, error) {
 	}, nil
 }
 
-func sessionCookieSecure() bool {
-	secure, _ := strconv.ParseBool(os.Getenv("ARTHUB_SECURE_COOKIES"))
-	return secure
-}
-
 func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   sessionCookieSecure(),
+		SameSite: http.SameSiteNoneMode,
+		Secure:   true,
 		Expires:  expiresAt,
 		MaxAge:   int(sessionDuration.Seconds()),
 	})
@@ -145,8 +138,8 @@ func clearSessionCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   sessionCookieSecure(),
+		SameSite: http.SameSiteNoneMode,
+		Secure:   true,
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})

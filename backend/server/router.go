@@ -11,6 +11,15 @@ import (
 func NewHandler() http.Handler {
 	mux := http.NewServeMux()
 
+    mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path != "/" {
+            http.NotFound(w, r)
+            return
+        }
+        w.Header().Set("Content-Type", "text/plain")
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("ArtHub backend is live!"))
+    })
 	mux.HandleFunc("/health", handlers.Health)
 	mux.HandleFunc("/auth/signup", handlers.Signup)
 	mux.HandleFunc("/auth/login", handlers.Login)

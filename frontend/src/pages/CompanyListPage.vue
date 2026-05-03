@@ -163,12 +163,12 @@ onMounted(loadCompanies);
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  padding: 20px 22px;
+  padding: 18px 20px;
   margin-bottom: 20px;
-  border: 1px solid rgba(15, 92, 192, 0.14);
-  border-radius: 18px;
+  border: 1px solid rgba(15, 92, 192, 0.12);
+  border-radius: 14px;
   background:
-    radial-gradient(circle at top left, rgba(15, 92, 192, 0.12), transparent 38%),
+    radial-gradient(circle at top left, rgba(15, 92, 192, 0.1), transparent 36%),
     linear-gradient(135deg, #f9fbff 0%, #eef5ff 100%);
 }
 
@@ -194,11 +194,12 @@ onMounted(loadCompanies);
 
 .company-overview__badge {
   flex-shrink: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(15, 92, 192, 0.16);
   color: #0f5cc0;
+  font-size: 0.88rem;
   font-weight: 700;
 }
 
@@ -211,10 +212,8 @@ onMounted(loadCompanies);
   overflow: hidden;
   padding: 20px;
   border-color: rgba(15, 92, 192, 0.12);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 255, 0.98)),
-    #fbfcfd;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
   transition:
     transform 160ms ease,
     box-shadow 160ms ease,
@@ -225,14 +224,14 @@ onMounted(loadCompanies);
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, #0f5cc0 0%, #65a7ff 100%);
+  width: 3px;
+  background: linear-gradient(180deg, #0f5cc0 0%, #7ab3ff 100%);
 }
 
 .company-card:hover {
   transform: translateY(-2px);
   border-color: rgba(15, 92, 192, 0.28);
-  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
 }
 
 .company-card__layout {
@@ -267,6 +266,12 @@ onMounted(loadCompanies);
 .company-card__arrow {
   color: #7b8a9a;
   font-size: 1rem;
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.company-card:hover .company-card__arrow {
+  color: #0f5cc0;
+  transform: translateX(2px);
 }
 
 .company-card__title {
@@ -290,8 +295,8 @@ onMounted(loadCompanies);
   align-items: center;
   min-height: 34px;
   padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.88);
+  border-radius: 8px;
+  background: #f7f9fb;
   border: 1px solid rgba(21, 35, 56, 0.08);
   color: var(--muted);
   font-size: 0.88rem;

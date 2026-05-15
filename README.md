@@ -1,8 +1,8 @@
 # ArtHub
 
-ArtHub is the discussion layer for ART Analytics.
+ArtHub is a local discussion app for ART Analytics.
 
-The domain model is now:
+The domain model is:
 
 `Companies -> Posts -> Comments`
 
@@ -13,33 +13,64 @@ Each discussion stream is anchored to a company record with a unique ticker. Use
 - Backend: Go, `net/http`, SQLite
 - Frontend: Vue 3, TypeScript, Vite
 - Routing: `vue-router`
-- Testing: Go `testing`
+- Testing: Go `testing`, Vitest
 
-## Architecture
+## Local Setup
+
+Run the backend and frontend in two terminals.
 
 ### Backend
 
-- [backend/main.go](/C:/Users/arthu_/Downloads/CampusCommons/backend/main.go)
-  Starts the API server and initializes SQLite.
-- [backend/server/router.go](/C:/Users/arthu_/Downloads/CampusCommons/backend/server/router.go)
-  Registers HTTP routes and CORS.
-- [backend/database/db.go](/C:/Users/arthu_/Downloads/CampusCommons/backend/database/db.go)
-  Creates the schema and migrates legacy topic-based databases into the company model.
-- [backend/handlers](/C:/Users/arthu_/Downloads/CampusCommons/backend/handlers)
-  Session auth, company, post, comment, and vote handlers.
+```powershell
+cd backend
+go mod download
+go run main.go
+```
+
+Default backend URL: `http://localhost:8080`
+
+The backend creates a local SQLite database at `backend/data/arthub.db` by default.
+
+Optional backend environment variables:
+
+- `PORT`: backend port. Default: `8080`
+- `DB_PATH`: SQLite database path. Default: `data/arthub.db`
+- `ARTHUB_ALLOWED_ORIGINS`: comma-separated frontend origins allowed by CORS. Default: `http://localhost:3000,http://127.0.0.1:3000`
+- `ARTHUB_COOKIE_SECURE`: set to `true` only when serving over HTTPS. Default: `false`
+- `ARTHUB_COOKIE_SAMESITE`: `lax`, `strict`, or `none`. Default: `lax`
 
 ### Frontend
 
-- [frontend/src/pages](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/pages)
-  Route-level pages for company browsing, company detail, post detail, and create/edit flows.
-- [frontend/src/router](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/router)
-  Vue Router configuration and auth-aware navigation guards.
-- [frontend/src/services/api](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/services/api)
-  API client and domain-specific request helpers.
-- [frontend/src/types](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/types)
-  DTO and app domain types.
-- [frontend/src/composables](/C:/Users/arthu_/Downloads/CampusCommons/frontend/src/composables)
-  Session bootstrap and auth state.
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Default frontend URL: `http://localhost:3000`
+
+The checked-in local example and local `.env` point the frontend at:
+
+```text
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+## Tests
+
+### Backend
+
+```powershell
+cd backend
+go test ./...
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm run build
+npm test
+```
 
 ## API Overview
 
@@ -65,80 +96,13 @@ Each discussion stream is anchored to a company record with a unique ticker. Use
 Successful responses use:
 
 ```json
-{ "data": ... }
+{ "data": "..." }
 ```
 
 Error responses use:
 
 ```json
 { "error": { "message": "...", "code": "..." } }
-```
-
-## Company Model
-
-Companies are the root entity in the discussion tree.
-
-- `id`
-- `ticker`
-  Required, unique, normalized to uppercase.
-- `name`
-  Required company name.
-- `description`
-  Optional summary used on company list/detail pages.
-
-Posts belong to a company via `company_id`. Comments still belong to posts.
-
-## Auth
-
-ArtHub uses bcrypt password hashing plus server-side cookie sessions.
-
-- Company create/edit/delete requires a valid session.
-- Post create/edit/delete requires a valid session.
-- Comment create requires a valid session.
-- Voting requires a valid session.
-
-## Local Setup
-
-### Backend
-
-```bash
-cd backend
-go run main.go
-```
-
-Default API host: `http://localhost:8080`
-
-Optional environment variables:
-
-- `CAMPUSCOMMONS_ALLOWED_ORIGIN`
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-cp .env.example .env
-npm run dev
-```
-
-Default frontend host: `http://localhost:3000`
-
-The frontend uses `VITE_API_BASE_URL` and falls back to `http://localhost:8080`.
-
-## Tests
-
-### Backend
-
-```bash
-cd backend
-go test ./...
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm run build
 ```
 
 ## Manual Smoke Test

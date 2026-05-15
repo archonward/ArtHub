@@ -15,7 +15,7 @@ var DB *sql.DB
 func InitDB() error {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		dbPath = "data/campuscommons.db"
+		dbPath = "data/arthub.db"
 	}
 
 	dataDir := filepath.Dir(dbPath)

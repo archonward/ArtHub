@@ -9,20 +9,22 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	sessionCookieName    = "arthub_session"
-	sessionDuration      = 7 * 24 * time.Hour
-	minPasswordLength    = 8
-	maxPasswordLength    = 72 // bcrypt limit
-	minUsernameLength    = 3
-	maxUsernameLength    = 32
-	authUserContextKey   = contextKey("auth_user")
+	sessionCookieName  = "arthub_session"
+	sessionDuration    = 7 * 24 * time.Hour
+	minPasswordLength  = 8
+	maxPasswordLength  = 72 // bcrypt limit
+	minUsernameLength  = 3
+	maxUsernameLength  = 32
+	authUserContextKey = contextKey("auth_user")
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -125,8 +127,8 @@ func setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) 
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
-		Secure:   true,
+		SameSite: sessionCookieSameSite(),
+		Secure:   sessionCookieSecure(),
 		Expires:  expiresAt,
 		MaxAge:   int(sessionDuration.Seconds()),
 	})
@@ -138,11 +140,26 @@ func clearSessionCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
-		Secure:   true,
+		SameSite: sessionCookieSameSite(),
+		Secure:   sessionCookieSecure(),
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})
+}
+
+func sessionCookieSecure() bool {
+	return strings.EqualFold(os.Getenv("ARTHUB_COOKIE_SECURE"), "true")
+}
+
+func sessionCookieSameSite() http.SameSite {
+	switch strings.ToLower(os.Getenv("ARTHUB_COOKIE_SAMESITE")) {
+	case "none":
+		return http.SameSiteNoneMode
+	case "strict":
+		return http.SameSiteStrictMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }
 
 func hashSessionToken(token string) string {
